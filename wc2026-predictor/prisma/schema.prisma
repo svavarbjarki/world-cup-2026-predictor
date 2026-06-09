@@ -1,0 +1,356 @@
+// Prisma schema for the World Cup 2026 prediction game.
+// Docs: https://pris.ly/d/prisma-schema
+//
+// Target database is SQLite (single file on a persistent disk in production).
+// Two SQLite-specific consequences worth knowing:
+//   1. Prisma enums are not supported on SQLite, so fields that are conceptually
+//      enums (submission status, knockout round) are String with their allowed
+//      values documented in a comment. App/engine code owns the value vocabulary.
+//   2. Everything is small (a handful of friends), so we favor simple and clear
+//      modeling over heavy normalization.
+//
+// Mapping to the engine (src/lib/engine/types.ts):
+//   - Team           -> engine Team (id, name, group, seed).
+//   - GroupFixture   -> supplies homeTeamId/awayTeamId for engine GroupMatch.
+//   - GroupPrediction / GroupResult supply the home/away goals (engine Scoreline)
+//     that complete a GroupMatch for the engine.
+// Where a stored row maps onto an engine type, the field names are kept aligned
+// (homeTeamId, awayTeamId, homeGoals, awayGoals, group, seed) so conversion is
+// a trivial object pick rather than a translation layer.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Reference / fixed tournament data (seeded, shared by everyone)
+// ---------------------------------------------------------------------------
+//
+// The official KNOCKOUT skeleton (round of 32 slot definitions, Annex C
+// third-place allocation, and the round-to-round progression) deliberately does
+// NOT live in the database. It is fixed reference data already encoded and tested
+// in engine code (src/lib/engine/annexC.ts, buildRoundOf32.ts, advanceBracket.ts).
+// Duplicating it as rows would risk the DB and the engine drifting apart. The DB
+// therefore only stores per-match WINNER picks/results keyed by official match
+// number (see KnockoutPrediction / KnockoutResult); the matchups themselves are
+// computed by the engine.
+
+/// A national team. Maps directly onto engine Team (id, name, group, seed).
+model Team {
+  /// Stable id. We use the team's isoCode (unique across the 48 teams).
+  id    String @id
+  name  String
+  /// Group letter "A" through "L". Maps to engine GroupLetter.
+  group String
+  /// Seeding within the group, 1 is the top seed. Mirrors `pot` (seed = pot):
+  /// the engine's Team.seed is the deterministic strength/tie-break number, which
+  /// is exactly what the draw pot represents (lower = stronger). Kept as its own
+  /// field so the engine mapping and existing seed-ordered queries are unchanged.
+  seed  Int
+  /// ISO 3166-1 alpha-2 code (or "gb-eng" / "gb-sct") for flag rendering.
+  isoCode String
+  /// Draw pot 1-4 (source value for `seed`; lower = stronger).
+  pot     Int
+
+  // Back-relations.
+  homeFixtures         GroupFixture[]       @relation("HomeTeam")
+  awayFixtures         GroupFixture[]       @relation("AwayTeam")
+  knockoutHomeFixtures KnockoutFixture[]    @relation("KnockoutHomeTeam")
+  knockoutAwayFixtures KnockoutFixture[]    @relation("KnockoutAwayTeam")
+  knockoutPredictions  KnockoutPrediction[] @relation("PredictedWinner")
+  knockoutResults      KnockoutResult[]     @relation("ActualWinner")
+  players              Player[]             @relation("TeamPlayers")
+
+  @@index([group])
+}
+
+/// An award-contender player, seeded from src/lib/data/players.ts. Used for the
+/// individual award predictions (Golden Ball / Boot / Glove / Young Player).
+/// This is a starter pool, not full squads.
+model Player {
+  id   String @id @default(cuid())
+  name String
+  /// "GK" | "DF" | "MF" | "FW".
+  position String
+  /// Approximate age during the tournament.
+  age      Int
+  /// Birth year where known; used for the Young Player eligibility check.
+  birthYear Int?
+
+  teamId String
+  team   Team   @relation("TeamPlayers", fields: [teamId], references: [id])
+
+  @@unique([name, teamId])
+  @@index([teamId])
+}
+
+/// One of the 72 real group-stage matches. Shared fixture list everyone predicts.
+model GroupFixture {
+  id String @id @default(cuid())
+
+  /// Official match number (group stage is 1-72). Stable ordering key.
+  matchNumber Int    @unique
+  /// Group letter "A" through "L".
+  group       String
+  /// Matchday within the group, 1 to 3.
+  matchday    Int
+  /// Real kickoff time (stored UTC). Null until the organizer seeds the real
+  /// schedule; the "next match" feature falls back to matchNumber order when absent.
+  kickoffAt   DateTime?
+  /// Venue name from the published schedule. Null until seeded.
+  venue       String?
+
+  homeTeamId String
+  awayTeamId String
+  homeTeam   Team   @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam   Team   @relation("AwayTeam", fields: [awayTeamId], references: [id])
+
+  predictions GroupPrediction[]
+  result      GroupResult?
+
+  @@index([group])
+}
+
+/// The REAL Round of 32, entered by the organizer once the actual group stage
+/// finishes. There are exactly 16 rows, one per official R32 match (match numbers
+/// 73-88, slots 1-16), matching the engine's R32 match/slot shape so the rows can
+/// feed advanceBracket directly: each row maps to a KnockoutMatch with teamA =
+/// homeTeam and teamB = awayTeam.
+///
+/// Teams are nullable until the organizer fills them in. They stay editable until
+/// the knockout phase is opened (Settings.knockoutOpenedAt); after that they are
+/// frozen. Each real team may appear in at most one R32 match (enforced in the
+/// admin action, not the database).
+model KnockoutFixture {
+  id String @id @default(cuid())
+
+  /// Official knockout match number for the round of 32 (73-88).
+  matchNumber Int @unique
+  /// Official bracket slot (1-16), matching the engine's R32 ordering.
+  slot        Int @unique
+  /// Real kickoff time. Null until the organizer seeds it; the "next match"
+  /// feature falls back to order when absent.
+  kickoffAt   DateTime?
+
+  homeTeamId String?
+  awayTeamId String?
+  homeTeam   Team?   @relation("KnockoutHomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam   Team?   @relation("KnockoutAwayTeam", fields: [awayTeamId], references: [id])
+
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+
+/// A participant. Identity is just a chosen display name (no email, no per-user
+/// password; access is gated by one shared password handled in app logic).
+model User {
+  id          String   @id @default(cuid())
+  /// Chosen name, also the public identity, so it must be unique.
+  displayName String   @unique
+  createdAt   DateTime @default(now())
+
+  /// GROUP submission status: "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED".
+  /// SUBMITTED means the group predictions are locked permanently. This is fully
+  /// INDEPENDENT of the knockout submission below; the two happen weeks apart.
+  groupStatus    String    @default("NOT_STARTED")
+  /// Timestamp of the group submission / groups-phase lock. Set when groupStatus
+  /// becomes SUBMITTED. Null = groups still editable.
+  groupsLockedAt DateTime?
+
+  /// KNOCKOUT submission status: "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED".
+  /// SUBMITTED means the knockout bracket is locked permanently. Independent of
+  /// the group submission above.
+  knockoutStatus      String    @default("NOT_STARTED")
+  /// Timestamp of the knockout submission. Null = knockout not submitted yet.
+  knockoutSubmittedAt DateTime?
+
+  /// AWARDS submission status: "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED".
+  /// Awards are pre-tournament; they also lock for everyone at the global first
+  /// kickoff (Settings.kickoffLockAt). This flag is the user's own submission,
+  /// independent of the group and knockout submissions.
+  awardsStatus      String    @default("NOT_STARTED")
+  /// Timestamp of the awards submission. Null = not submitted yet.
+  awardsSubmittedAt DateTime?
+
+  /// Opaque token stored in a cookie so a returning device can resume this user
+  /// without any login. Optional and intentionally simple.
+  sessionToken String? @unique
+
+  groupPredictions    GroupPrediction[]
+  knockoutPredictions KnockoutPrediction[]
+  awardPrediction     AwardPrediction?
+}
+
+// ---------------------------------------------------------------------------
+// Predictions
+// ---------------------------------------------------------------------------
+
+/// A user's predicted scoreline for one shared group fixture. The two teams come
+/// from the fixture; only the goals live here (engine Scoreline). One per user
+/// per fixture.
+model GroupPrediction {
+  id String @id @default(cuid())
+
+  userId         String
+  groupFixtureId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupFixture   GroupFixture @relation(fields: [groupFixtureId], references: [id])
+
+  homeGoals Int
+  awayGoals Int
+
+  @@unique([userId, groupFixtureId])
+  @@index([userId])
+}
+
+/// A user's picked winner for one knockout match.
+///
+/// The bracket positions are now SHARED across all users: the round of 32 comes
+/// from the organizer-entered KnockoutFixture rows (the real tournament), not from
+/// each user's group predictions. We still store only the picked winner, keyed by
+/// official match number (round of 32 is M73-M88, R16 M89-M96, QF M97-M100, SF
+/// M101-M102, final M104). The engine seeds the round of 32 from KnockoutFixture
+/// and advanceBracket applies these per-match winner picks, so each user's full
+/// path reconstructs deterministically. The picked team being one of that slot's
+/// two teams is validated at compute time, not by the database.
+model KnockoutPrediction {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Round label: "R32" | "R16" | "QF" | "SF" | "FINAL". Redundant with the
+  /// match number range but kept for clear querying and display.
+  round       String
+  /// Official knockout match number (73-104). Identifies the bracket slot.
+  matchNumber Int
+
+  predictedWinnerTeamId String
+  predictedWinner       Team   @relation("PredictedWinner", fields: [predictedWinnerTeamId], references: [id])
+
+  @@unique([userId, matchNumber])
+  @@index([userId])
+}
+
+/// A user's tournament-long AWARD predictions: one team for The Winner and one
+/// player for each of the four individual awards. One row per user. The picks are
+/// stored as plain team/player ids (no FK relations) to keep this compact;
+/// existence and per-category eligibility are validated in the server action, and
+/// seeded teams/players have stable ids. Null = not picked yet.
+model AwardPrediction {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  winnerTeamId        String?
+  goldenBallPlayerId  String?
+  goldenBootPlayerId  String?
+  goldenGlovePlayerId String?
+  youngPlayerId       String?
+}
+
+/// The actual award winners, entered once by the organizer near tournament end.
+/// Single row (id = 1), mirroring AwardPrediction's columns. Null until entered.
+model AwardResult {
+  id Int @id @default(1)
+
+  winnerTeamId        String?
+  goldenBallPlayerId  String?
+  goldenBootPlayerId  String?
+  goldenGlovePlayerId String?
+  youngPlayerId       String?
+
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Real-world results (entered by an organizer in a later screen)
+// ---------------------------------------------------------------------------
+
+/// The actual scoreline of a group fixture. Row exists once the match is played
+/// (absence means not played yet). One-to-one with GroupFixture.
+model GroupResult {
+  id String @id @default(cuid())
+
+  groupFixtureId String       @unique
+  groupFixture   GroupFixture @relation(fields: [groupFixtureId], references: [id])
+
+  homeGoals Int
+  awayGoals Int
+
+  enteredAt DateTime @default(now())
+}
+
+/// The actual real-world outcome of a knockout match.
+///
+/// Subtle point (mirror of KnockoutPrediction): the REAL knockout matchups are
+/// the OFFICIAL ones, not any individual user's bracket. They are derived by the
+/// engine from the real group results (real standings -> buildRoundOf32 ->
+/// advanceBracket), so we do not store the real matchups either. We store only
+/// the actual winner, keyed by official match number. Scoring then compares, per
+/// official match number, a user's predictedWinnerTeamId against this
+/// actualWinnerTeamId, which is exactly the engine rule scoreKnockoutMatch
+/// expects ("each real match's actual outcome").
+model KnockoutResult {
+  id String @id @default(cuid())
+
+  /// Official knockout match number (73-104). One result row per official match.
+  matchNumber Int    @unique
+  /// Round label: "R32" | "R16" | "QF" | "SF" | "FINAL".
+  round       String
+
+  actualWinnerTeamId String
+  actualWinner       Team   @relation("ActualWinner", fields: [actualWinnerTeamId], references: [id])
+
+  enteredAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Config / settings
+// ---------------------------------------------------------------------------
+
+/// Organizer-tunable settings. Single row (id = 1). Point values default to the
+/// engine defaults (DEFAULT_GROUP_SCORING / DEFAULT_KNOCKOUT_SCORING) and are
+/// passed into the scoring functions, so they change without code edits.
+///
+/// Scoring note: computed points are NOT persisted anywhere. They are derived on
+/// the fly from predictions + results + these settings by the pure engine. The
+/// dataset is tiny, results change as the organizer enters them, and recomputing
+/// avoids any stored-score invalidation. Add a Score model later only if a
+/// leaderboard query ever needs caching.
+model Settings {
+  id Int @id @default(1)
+
+  groupExactPoints  Int @default(3)
+  groupResultPoints Int @default(1)
+  groupWrongPoints  Int @default(0)
+
+  knockoutCorrectPoints Int @default(3)
+  knockoutWrongPoints   Int @default(0)
+
+  /// Flat points for each correct award prediction (5 categories, default 5 each).
+  awardPoints Int @default(5)
+
+  /// GROUP-stage global deadline. After this, group predictions lock for everyone.
+  /// Null means no group deadline set yet.
+  kickoffLockAt DateTime?
+
+  /// When the organizer OPENED the knockout phase. Set only after all 16 real R32
+  /// matchups are entered. This is what makes the user knockout flow available and
+  /// freezes the R32 matchups. Null = knockout phase not open yet.
+  knockoutOpenedAt DateTime?
+
+  /// KNOCKOUT global deadline (first knockout kickoff). After this, knockout
+  /// predictions lock for everyone. Null means no knockout deadline set yet.
+  knockoutLockAt DateTime?
+
+  updatedAt DateTime @updatedAt
+}

@@ -1,0 +1,62 @@
+/* Lightweight single-elimination bracket connectors. Each round is a flex column
+   distributed with space-around; the bracket stretches all rounds to the same
+   height so later rounds line up at the midpoints of their feeders. Connectors
+   are plain borders on pseudo-elements (no library). */
+
+.bracket {
+  display: flex;
+  align-items: stretch;
+  min-width: max-content;
+  --bracket-line: rgba(120, 120, 120, 0.45);
+  --gap: 18px;
+}
+
+.round {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  padding: 4px var(--gap);
+}
+
+.pair {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  flex: 1 0 auto;
+  position: relative;
+}
+
+.node {
+  position: relative;
+}
+
+/* Vertical line joining the two nodes of a feeding pair (their centers sit at
+   25% and 75% of the pair height). */
+.feeding .pair::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 25%;
+  bottom: 25%;
+  border-right: 1px solid var(--bracket-line);
+}
+
+/* Horizontal line from a feeding pair's center into the next column. */
+.feeding .pair::before {
+  content: "";
+  position: absolute;
+  right: calc(-1 * var(--gap));
+  top: 50%;
+  width: var(--gap);
+  border-top: 1px solid var(--bracket-line);
+}
+
+/* Incoming horizontal stub on each fed node. */
+.fed .node::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--gap));
+  top: 50%;
+  width: var(--gap);
+  border-top: 1px solid var(--bracket-line);
+}
