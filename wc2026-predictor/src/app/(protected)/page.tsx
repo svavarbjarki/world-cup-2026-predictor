@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { logoutAction } from "@/lib/auth-actions";
-import { getPlayers, getNextMatchForViewer } from "@/lib/hub";
+import { getPlayers, getAllMatchesForViewer } from "@/lib/hub";
 import { getLeaderboard } from "@/lib/leaderboard";
-import { flagEmoji } from "@/lib/data/teams";
+import { prisma } from "@/lib/prisma";
+import { NextMatches } from "./next-matches";
 
 export const dynamic = "force-dynamic";
 
@@ -13,25 +14,64 @@ function statusLabel(status: string): string {
   return "Not started";
 }
 
-function StatusChip({ status }: { status: string }) {
+function StatusChip({
+  status,
+  big = false,
+}: {
+  status: string;
+  big?: boolean;
+}) {
   const tone =
     status === "SUBMITTED"
       ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
       : status === "IN_PROGRESS"
         ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
         : "bg-black/5 text-black/50 dark:bg-white/10 dark:text-white/50";
+  const size = big ? "px-2.5 py-1 text-sm" : "px-1.5 py-0.5 text-xs";
   return (
-    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${tone}`}>
+    <span className={`rounded font-medium ${size} ${tone}`}>
       {statusLabel(status)}
     </span>
   );
 }
 
-function Flag({ isoCode }: { isoCode: string }) {
+// One centered status line (e.g. "Groups  Not started"), a bit larger.
+function StatusRow({ label, status }: { label: string; status: string }) {
   return (
-    <span aria-hidden className="mr-1">
-      {flagEmoji(isoCode)}
-    </span>
+    <div className="flex items-center gap-2 text-base">
+      <span className="font-medium">{label}</span>
+      <StatusChip status={status} big />
+    </div>
+  );
+}
+
+// A stacked, full-width nav button coloured by state:
+//   red    = not available yet (e.g. knockout before the organizer opens it),
+//   yellow = available but you have not submitted this prediction,
+//   green  = you have submitted it.
+function NavButton({
+  href,
+  label,
+  available,
+  submitted,
+}: {
+  href: string;
+  label: string;
+  available: boolean;
+  submitted: boolean;
+}) {
+  const tone = !available
+    ? "bg-red-600 hover:bg-red-700"
+    : submitted
+      ? "bg-emerald-600 hover:bg-emerald-700"
+      : "bg-amber-500 hover:bg-amber-600";
+  return (
+    <Link
+      href={href}
+      className={`w-full max-w-xs rounded-lg px-4 py-3 text-center font-medium text-white ${tone}`}
+    >
+      {label}
+    </Link>
   );
 }
 
@@ -39,29 +79,31 @@ export default async function Home() {
   const user = await getCurrentUser();
   if (!user) return null; // layout guarantees a user; satisfy types
 
-  const [players, leaderboard, nextMatch] = await Promise.all([
+  const [players, leaderboard, matchData, settings] = await Promise.all([
     getPlayers(),
     getLeaderboard(),
-    getNextMatchForViewer(user.id),
+    getAllMatchesForViewer(user.id),
+    prisma.settings.findUnique({ where: { id: 1 } }),
   ]);
+
+  // Availability of each prediction section (color the nav buttons green/red).
+  // "Available" means the section is open to use, regardless of your own
+  // submission: group + awards are open pre-tournament until the global first
+  // kickoff; knockout opens only once the organizer opens the bracket.
+  const now = new Date();
+  const preTournamentLocked =
+    settings?.kickoffLockAt != null && settings.kickoffLockAt <= now;
+  const knockoutLocked =
+    settings?.knockoutLockAt != null && settings.knockoutLockAt <= now;
+  const groupsAvailable = !preTournamentLocked;
+  const awardsAvailable = !preTournamentLocked;
+  const knockoutAvailable =
+    settings?.knockoutOpenedAt != null && !knockoutLocked;
 
   return (
     <main className="mx-auto w-full max-w-2xl p-4 sm:p-6">
-      <header className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Hi {user.displayName}</h1>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-black/60 dark:text-white/60">
-            <span className="flex items-center gap-1">
-              Groups <StatusChip status={user.groupStatus} />
-            </span>
-            <span className="flex items-center gap-1">
-              Knockout <StatusChip status={user.knockoutStatus} />
-            </span>
-            <span className="flex items-center gap-1">
-              Awards <StatusChip status={user.awardsStatus} />
-            </span>
-          </div>
-        </div>
+      <header className="mb-5 flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">Hi {user.displayName}</h1>
         <form action={logoutAction}>
           <button className="rounded-lg border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10">
             Log out
@@ -69,86 +111,41 @@ export default async function Home() {
         </form>
       </header>
 
-      <div className="mb-5 flex flex-wrap gap-2">
-        <Link
-          href="/groups"
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          Group predictions
-        </Link>
-        <Link
-          href="/knockout"
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          Knockout bracket
-        </Link>
-        <Link
-          href="/awards"
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          Awards
-        </Link>
+      {/* Your three submission statuses, stacked and centered. */}
+      <div className="mb-5 flex flex-col items-center gap-2">
+        <StatusRow label="Groups" status={user.groupStatus} />
+        <StatusRow label="Knockout" status={user.knockoutStatus} />
+        <StatusRow label="Awards" status={user.awardsStatus} />
       </div>
 
-      {/* Next match */}
-      <section className="mb-6 rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-neutral-900">
-        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
-          Next match
-        </h2>
-        {nextMatch ? (
-          <>
-            <div className="flex items-center justify-between text-xs text-black/50 dark:text-white/50">
-              <span>{nextMatch.label}</span>
-              <span>
-                {nextMatch.kickoffAt
-                  ? nextMatch.kickoffAt.toLocaleString()
-                  : "Schedule TBD"}
-              </span>
-            </div>
-            <div className="mt-2 flex items-center justify-center gap-3 text-lg font-medium">
-              <span>
-                <Flag isoCode={nextMatch.home.isoCode} />
-                {nextMatch.home.name}
-              </span>
-              <span className="text-black/30">vs</span>
-              <span>
-                <Flag isoCode={nextMatch.away.isoCode} />
-                {nextMatch.away.name}
-              </span>
-            </div>
+      {/* Entry points, stacked and centered. Green = available, red = not yet. */}
+      <div className="mb-6 flex flex-col items-center gap-3">
+        <NavButton
+          href="/groups"
+          label="Group predictions"
+          available={groupsAvailable}
+          submitted={user.groupStatus === "SUBMITTED"}
+        />
+        <NavButton
+          href="/knockout"
+          label="Knockout bracket"
+          available={knockoutAvailable}
+          submitted={user.knockoutStatus === "SUBMITTED"}
+        />
+        <NavButton
+          href="/awards"
+          label="Awards"
+          available={awardsAvailable}
+          submitted={user.awardsStatus === "SUBMITTED"}
+        />
+      </div>
 
-            <div className="mt-4 border-t border-black/5 pt-3 dark:border-white/10">
-              {nextMatch.picksVisible ? (
-                nextMatch.picks && nextMatch.picks.length > 0 ? (
-                  <ul className="space-y-1 text-sm">
-                    {nextMatch.picks.map((p) => (
-                      <li key={p.displayName} className="text-center">
-                        <span className="text-black/60 dark:text-white/60">
-                          {p.displayName}
-                        </span>
-                        <div className="font-medium">{p.text}</div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-black/50 dark:text-white/50">
-                    No submitted predictions for this match yet.
-                  </p>
-                )
-              ) : (
-                <p className="text-sm text-black/50 dark:text-white/50">
-                  Submit your{" "}
-                  {nextMatch.phase === "group" ? "group" : "knockout"}{" "}
-                  predictions to see what everyone picked.
-                </p>
-              )}
-            </div>
-          </>
-        ) : (
-          <p className="text-sm text-black/50 dark:text-white/50">
-            No upcoming matches to show yet.
-          </p>
-        )}
+      {/* Matches (swipe through; opens on the next match, scroll back for played) */}
+      <section className="mb-6">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
+          Matches
+        </h2>
+        <NextMatches matches={matchData.matches} nextIndex={matchData.nextIndex} />
       </section>
 
       {/* Leaderboard */}
@@ -209,31 +206,29 @@ export default async function Home() {
           {players.map((p) => (
             <li
               key={p.id}
-              className="flex items-center justify-between rounded-xl border border-black/10 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-neutral-900"
+              className="rounded-xl border border-black/10 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-neutral-900"
             >
-              <div>
-                <div className="font-medium">
-                  {p.displayName}
-                  {p.id === user.id ? (
-                    <span className="ml-1 text-xs text-black/40">(you)</span>
-                  ) : null}
-                </div>
-                <div className="mt-1 flex gap-2 text-xs text-black/50 dark:text-white/50">
-                  <span className="flex items-center gap-1">
-                    Groups <StatusChip status={p.groupStatus} />
-                  </span>
-                  <span className="flex items-center gap-1">
-                    KO <StatusChip status={p.knockoutStatus} />
-                  </span>
-                  <span className="flex items-center gap-1">
-                    Awd <StatusChip status={p.awardsStatus} />
-                  </span>
-                </div>
+              <div className="font-medium">
+                {p.displayName}
+                {p.id === user.id ? (
+                  <span className="ml-1 text-xs text-black/40">(you)</span>
+                ) : null}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-2 text-xs text-black/50 dark:text-white/50">
+                <span className="flex items-center gap-1">
+                  Groups <StatusChip status={p.groupStatus} />
+                </span>
+                <span className="flex items-center gap-1">
+                  KO <StatusChip status={p.knockoutStatus} />
+                </span>
+                <span className="flex items-center gap-1">
+                  Awd <StatusChip status={p.awardsStatus} />
+                </span>
               </div>
               {p.id !== user.id ? (
                 <Link
                   href={`/players/${p.id}`}
-                  className="rounded-lg border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  className="mt-3 block rounded-lg border border-black/15 px-3 py-2 text-center text-sm hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
                 >
                   View
                 </Link>

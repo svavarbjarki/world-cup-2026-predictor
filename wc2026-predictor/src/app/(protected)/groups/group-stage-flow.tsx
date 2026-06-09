@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import {
   saveMatchPredictionAction,
@@ -127,7 +128,10 @@ export function GroupStageFlow({
 
   return (
     <main className="mx-auto w-full max-w-2xl p-4 sm:p-6">
-      <header className="mb-4">
+      <Link href="/" className="text-sm text-blue-600">
+        &larr; Back to dashboard
+      </Link>
+      <header className="mt-2 mb-4">
         <h1 className="text-xl font-semibold">Group stage predictions</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
           Predict every scoreline. Groups unlock one at a time, A through L.
@@ -646,7 +650,10 @@ function ThirdPlaceRanking({
 function LockedView({ state }: { state: GroupStageState }) {
   return (
     <main className="mx-auto w-full max-w-2xl p-4 sm:p-6">
-      <div className="mb-5 rounded-2xl border border-emerald-300 bg-emerald-50 p-5 dark:border-emerald-700/50 dark:bg-emerald-950/40">
+      <Link href="/" className="text-sm text-blue-600">
+        &larr; Back to dashboard
+      </Link>
+      <div className="mt-2 mb-5 rounded-2xl border border-emerald-300 bg-emerald-50 p-5 dark:border-emerald-700/50 dark:bg-emerald-950/40">
         <h1 className="text-xl font-semibold">Your groups are locked</h1>
         <p className="mt-1 text-sm text-black/70 dark:text-white/70">
           Group predictions are now fixed. Knockout predictions open separately

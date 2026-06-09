@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
   saveKnockoutPickAction,
@@ -10,6 +11,7 @@ import type {
   KnockoutBracketState,
   KnockoutMatchView,
 } from "@/lib/predictions-types";
+import { BracketTree } from "./bracket-tree";
 
 /** All matches across rounds, in official bracket order. */
 function allMatches(state: KnockoutBracketState): KnockoutMatchView[] {
@@ -26,6 +28,7 @@ export function KnockoutFlow({
 }: {
   initialState: KnockoutBracketState;
 }) {
+  const router = useRouter();
   const [state, setState] = useState(initialState);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -110,14 +113,18 @@ export function KnockoutFlow({
         return;
       }
       setError(null);
-      setState(res.state);
       setConfirmingSubmit(false);
+      // After submitting, send the user back to the front page / dashboard.
+      router.push("/");
     });
   }
 
   return (
     <main className="mx-auto w-full max-w-2xl p-4 sm:p-6">
-      <header className="mb-4 flex items-center justify-between">
+      <Link href="/" className="text-sm text-blue-600">
+        &larr; Back to dashboard
+      </Link>
+      <header className="mt-2 mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Knockout bracket</h1>
           <p className="text-sm text-black/60 dark:text-white/60">
@@ -216,7 +223,7 @@ function PickCard({
         Who goes through?
       </p>
 
-      <div className="grid grid-cols-1 gap-3">
+      <div className="flex items-stretch gap-2">
         <TeamPickButton
           name={match.teamA.teamName}
           label={match.teamA.label}
@@ -231,6 +238,9 @@ function PickCard({
             match.teamA.teamId && onChoose(match, match.teamA.teamId)
           }
         />
+        <div className="flex shrink-0 items-center text-sm font-medium text-black/40 dark:text-white/40">
+          vs
+        </div>
         <TeamPickButton
           name={match.teamB.teamName}
           label={match.teamB.label}
@@ -299,7 +309,7 @@ function TeamPickButton({
       onClick={onClick}
       disabled={disabled}
       className={
-        "rounded-xl border p-4 text-left transition " +
+        "min-w-0 flex-1 rounded-xl border p-4 text-center transition " +
         (selected
           ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40"
           : "border-black/15 hover:border-blue-400 dark:border-white/20") +
@@ -352,32 +362,14 @@ function ReviewScreen({
         </div>
       ) : null}
 
-      {state.championName ? (
-        <div className="rounded-2xl border border-blue-300 bg-blue-50 p-5 text-center dark:border-blue-700/50 dark:bg-blue-950/40">
-          <div className="text-sm text-black/60 dark:text-white/60">
-            Your champion
-          </div>
-          <div className="text-2xl font-bold">{state.championName}</div>
-        </div>
-      ) : null}
+      {state.championName ? <ChampionBox name={state.championName} /> : null}
 
-      {state.rounds.map((round) => (
-        <div key={round.name}>
-          <h3 className="mb-2 font-semibold">{round.label}</h3>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {round.matches.map((m) => (
-              <BracketMatch
-                key={m.matchNumber}
-                match={m}
-                disabled={
-                  state.submitted || state.lockedByDeadline || !m.determined
-                }
-                onClick={() => onOpenMatch(m.matchNumber)}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
+      <BracketTree
+        rounds={state.rounds}
+        onOpenMatch={
+          state.submitted || state.lockedByDeadline ? undefined : onOpenMatch
+        }
+      />
 
       {!state.submitted && !state.lockedByDeadline ? (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-5 dark:border-amber-700/50 dark:bg-amber-950/40">
@@ -423,45 +415,12 @@ function ReviewScreen({
   );
 }
 
-function BracketMatch({
-  match,
-  disabled,
-  onClick,
-}: {
-  match: KnockoutMatchView;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  const row = (side: KnockoutMatchView["teamA"]) => {
-    const picked = match.pick !== null && match.pick === side.teamId;
-    return (
-      <div
-        className={
-          "flex items-center justify-between px-3 py-1.5 text-sm " +
-          (picked ? "font-semibold text-emerald-700 dark:text-emerald-300" : "")
-        }
-      >
-        <span>{side.teamName ?? side.label}</span>
-        {picked ? <span aria-hidden>&#10003;</span> : null}
-      </div>
-    );
-  };
-
+// Gold champion banner.
+export function ChampionBox({ name }: { name: string }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={
-        "rounded-xl border text-left transition " +
-        (disabled
-          ? "border-black/10 dark:border-white/10"
-          : "border-black/15 hover:border-blue-400 dark:border-white/20") +
-        (disabled ? " cursor-default" : "")
-      }
-    >
-      {row(match.teamA)}
-      <div className="border-t border-black/5 dark:border-white/10" />
-      {row(match.teamB)}
-    </button>
+    <div className="rounded-2xl border border-amber-400 bg-gradient-to-b from-amber-50 to-amber-100 p-5 text-center text-amber-900 shadow-sm dark:border-amber-500/50 dark:from-amber-950/40 dark:to-amber-900/30 dark:text-amber-100">
+      <div className="text-sm">Your champion</div>
+      <div className="text-2xl font-bold">{name}</div>
+    </div>
   );
 }

@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "World Cup 2026 Predictor",
   description: "Predict the 2026 World Cup with your friends.",
+  icons: {
+    icon: "/world-cup.svg",
+  },
 };
 
 // Mobile-first: device-width scaling, and viewportFit "cover" so iOS exposes the
