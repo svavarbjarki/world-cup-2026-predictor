@@ -156,16 +156,16 @@ export default async function Home() {
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
           Leaderboard
         </h2>
-        <div className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-2xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900">
+          <table className="w-full min-w-[20rem] text-sm">
             <thead>
               <tr className="text-left text-black/50 dark:text-white/50">
-                <th className="px-3 py-2 font-medium">#</th>
-                <th className="px-3 py-2 font-medium">Player</th>
-                <th className="px-3 py-2 text-center font-medium">Grp</th>
-                <th className="px-3 py-2 text-center font-medium">KO</th>
-                <th className="px-3 py-2 text-center font-medium">Awd</th>
-                <th className="px-3 py-2 text-center font-medium">Total</th>
+                <th className="px-2 py-2.5 sm:px-3 font-medium">#</th>
+                <th className="px-2 py-2.5 sm:px-3 font-medium">Player</th>
+                <th className="px-2 py-2.5 sm:px-3 text-center font-medium">Grp</th>
+                <th className="px-2 py-2.5 sm:px-3 text-center font-medium">KO</th>
+                <th className="px-2 py-2.5 sm:px-3 text-center font-medium">Awd</th>
+                <th className="px-2 py-2.5 sm:px-3 text-center font-medium">Total</th>
               </tr>
             </thead>
             <tbody>
@@ -174,19 +174,19 @@ export default async function Home() {
                   key={row.userId}
                   className="border-t border-black/5 dark:border-white/10"
                 >
-                  <td className="px-3 py-2 text-black/50 dark:text-white/50">
+                  <td className="px-2 py-2.5 sm:px-3 text-black/50 dark:text-white/50">
                     {row.rank}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-2 py-2.5 sm:px-3">
                     {row.displayName}
                     {row.userId === user.id ? (
                       <span className="ml-1 text-xs text-black/40">(you)</span>
                     ) : null}
                   </td>
-                  <td className="px-3 py-2 text-center">{row.groupPoints}</td>
-                  <td className="px-3 py-2 text-center">{row.knockoutPoints}</td>
-                  <td className="px-3 py-2 text-center">{row.awardPoints}</td>
-                  <td className="px-3 py-2 text-center font-semibold">
+                  <td className="px-2 py-2.5 sm:px-3 text-center">{row.groupPoints}</td>
+                  <td className="px-2 py-2.5 sm:px-3 text-center">{row.knockoutPoints}</td>
+                  <td className="px-2 py-2.5 sm:px-3 text-center">{row.awardPoints}</td>
+                  <td className="px-2 py-2.5 sm:px-3 text-center font-semibold">
                     {row.totalPoints}
                   </td>
                 </tr>

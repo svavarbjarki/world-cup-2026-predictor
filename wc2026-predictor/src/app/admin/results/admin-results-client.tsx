@@ -185,7 +185,7 @@ function GroupResultRow({
         )}
       </div>
       <div className="flex items-center gap-2">
-        <div className="flex-1 text-right text-sm">
+        <div className="min-w-0 flex-1 truncate text-right text-sm">
           <Flag isoCode={fixture.home.isoCode} /> {fixture.home.name}
         </div>
         <input
@@ -195,9 +195,9 @@ function GroupResultRow({
           min={0}
           value={home}
           onChange={(e) => setHome(e.target.value)}
-          className="w-12 rounded-lg border border-black/15 bg-transparent px-1 py-1.5 text-center outline-none focus:border-blue-500 dark:border-white/20"
+          className="w-12 shrink-0 rounded-lg border border-black/15 bg-transparent px-1 py-1.5 text-center outline-none focus:border-blue-500 dark:border-white/20"
         />
-        <span className="text-black/30">-</span>
+        <span className="shrink-0 text-black/30">-</span>
         <input
           aria-label={`${fixture.away.name} goals`}
           type="number"
@@ -205,19 +205,19 @@ function GroupResultRow({
           min={0}
           value={away}
           onChange={(e) => setAway(e.target.value)}
-          className="w-12 rounded-lg border border-black/15 bg-transparent px-1 py-1.5 text-center outline-none focus:border-blue-500 dark:border-white/20"
+          className="w-12 shrink-0 rounded-lg border border-black/15 bg-transparent px-1 py-1.5 text-center outline-none focus:border-blue-500 dark:border-white/20"
         />
-        <div className="flex-1 text-sm">
+        <div className="min-w-0 flex-1 truncate text-sm">
           {fixture.away.name} <Flag isoCode={fixture.away.isoCode} />
         </div>
-        <button
-          onClick={save}
-          disabled={pending}
-          className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {pending ? "..." : saved ? "Edit" : "Save"}
-        </button>
       </div>
+      <button
+        onClick={save}
+        disabled={pending}
+        className="mt-2 w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 sm:w-auto"
+      >
+        {pending ? "Saving..." : saved ? "Edit result" : "Save result"}
+      </button>
       {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
     </div>
   );

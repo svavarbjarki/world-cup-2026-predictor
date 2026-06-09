@@ -220,7 +220,7 @@ function GroupNav({
       {state.groups.map((g) => {
         const isActive = g.letter === activeLetter;
         const base =
-          "h-9 w-9 rounded-lg text-sm font-medium flex items-center justify-center border transition";
+          "h-11 w-11 rounded-lg text-sm font-medium flex items-center justify-center border transition";
         let style: string;
         if (!g.unlocked) {
           style =
@@ -356,16 +356,16 @@ function MatchCard({
         </button>
       </form>
 
-      <div className="mt-3 flex items-center justify-between text-sm">
+      <div className="mt-2 flex items-center justify-between text-sm">
         <button
           onClick={onPrev}
           disabled={!onPrev}
-          className="text-blue-600 disabled:text-black/25 dark:disabled:text-white/25"
+          className="px-2 py-2 text-blue-600 disabled:text-black/25 dark:disabled:text-white/25"
         >
           &larr; Previous
         </button>
         {onSeeStandings ? (
-          <button onClick={onSeeStandings} className="text-blue-600">
+          <button onClick={onSeeStandings} className="px-2 py-2 text-blue-600">
             See standings
           </button>
         ) : (
@@ -374,7 +374,7 @@ function MatchCard({
         <button
           onClick={onNext}
           disabled={!onNext}
-          className="text-blue-600 disabled:text-black/25 dark:disabled:text-white/25"
+          className="px-2 py-2 text-blue-600 disabled:text-black/25 dark:disabled:text-white/25"
         >
           Next &rarr;
         </button>

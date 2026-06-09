@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,6 +15,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "World Cup 2026 Predictor",
   description: "Predict the 2026 World Cup with your friends.",
+};
+
+// Mobile-first: device-width scaling, and viewportFit "cover" so iOS exposes the
+// safe-area-inset env() values used for bottom padding on phones with a home bar.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

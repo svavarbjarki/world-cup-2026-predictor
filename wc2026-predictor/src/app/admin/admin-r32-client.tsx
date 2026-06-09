@@ -167,6 +167,9 @@ export function AdminR32({
       {/* The bracket is wide; it scrolls horizontally (and the page scrolls
           vertically). No separate mobile layout, since /admin is a single
           organizer tool, not a primary user surface. */}
+      <p className="mb-1 text-xs text-black/40 dark:text-white/40">
+        Scroll sideways to see all rounds.
+      </p>
       <div className="overflow-x-auto pb-4">
         <div className={styles.bracket}>
           {layout.map((round, ri) => {
