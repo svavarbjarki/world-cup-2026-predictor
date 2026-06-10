@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { flagEmoji } from "@/lib/data/teams";
 import type { NextMatchView } from "@/lib/hub";
+import { MatchAggregateBar } from "./match-aggregate-bar";
 
 function Flag({ isoCode }: { isoCode: string }) {
   return (
@@ -90,9 +91,16 @@ export function NextMatches({
             ) : null}
 
             <div className="mt-4 border-t border-black/5 pt-3 dark:border-white/10">
+              <MatchAggregateBar
+                aggregate={m.aggregate}
+                home={m.home}
+                away={m.away}
+                phase={m.phase}
+              />
+
               {m.picksVisible ? (
                 m.picks && m.picks.length > 0 ? (
-                  <ul className="space-y-1 text-sm">
+                  <ul className="mt-3 space-y-1 text-sm">
                     {m.picks.map((p) => (
                       <li key={p.displayName} className="text-center">
                         <span className="text-black/60 dark:text-white/60">
@@ -102,17 +110,8 @@ export function NextMatches({
                       </li>
                     ))}
                   </ul>
-                ) : (
-                  <p className="text-center text-sm text-black/50 dark:text-white/50">
-                    No submitted predictions for this match.
-                  </p>
-                )
-              ) : (
-                <p className="text-center text-sm text-black/50 dark:text-white/50">
-                  Submit your {m.phase === "group" ? "group" : "knockout"}{" "}
-                  predictions to see what everyone picked.
-                </p>
-              )}
+                ) : null
+              ) : null}
             </div>
           </div>
         ))}

@@ -8,6 +8,11 @@ import { prisma } from "@/lib/prisma";
 import { hasSubmitted, canSeeOthersPredictions } from "@/lib/visibility";
 import { getGroupStageState, getKnockoutBracketState } from "@/lib/predictions";
 import { resolveAwardPicks, type ResolvedAwardPicks } from "@/lib/awards-server";
+import {
+  groupAggregate,
+  knockoutAggregate,
+  type MatchAggregate,
+} from "@/lib/aggregates";
 import type {
   GroupStageState,
   KnockoutBracketState,
@@ -61,6 +66,8 @@ export interface NextMatchView {
   picksVisible: boolean;
   /** Submitted players' picks, or null when the viewer has not earned visibility. */
   picks: NextMatchPick[] | null;
+  /** How submitted players called the outcome, gated by the same phase rule. */
+  aggregate: MatchAggregate;
 }
 
 interface NextMatchBase {
@@ -69,6 +76,8 @@ interface NextMatchBase {
   kickoffAt: Date | null;
   home: TeamLite;
   away: TeamLite;
+  homeTeamId: string;
+  awayTeamId: string;
   played: boolean;
   result: string | null;
   fixtureId?: string;
@@ -119,6 +128,8 @@ async function allMatchesSorted(): Promise<NextMatchBase[]> {
       kickoffAt: f.kickoffAt,
       home: { name: f.homeTeam.name, isoCode: f.homeTeam.isoCode },
       away: { name: f.awayTeam.name, isoCode: f.awayTeam.isoCode },
+      homeTeamId: f.homeTeamId,
+      awayTeamId: f.awayTeamId,
       fixtureId: f.id,
       order: f.matchNumber,
       played: res != null,
@@ -142,6 +153,8 @@ async function allMatchesSorted(): Promise<NextMatchBase[]> {
       kickoffAt: f.kickoffAt,
       home: { name: f.homeTeam.name, isoCode: f.homeTeam.isoCode },
       away: { name: f.awayTeam.name, isoCode: f.awayTeam.isoCode },
+      homeTeamId: f.homeTeamId!,
+      awayTeamId: f.awayTeamId!,
       matchNumber: f.matchNumber,
       // Knockout sorts after all group fixtures in the no-kickoff fallback.
       order: 1000 + f.slot,
@@ -214,6 +227,10 @@ export async function getAllMatchesForViewer(
   ]);
 
   const byFixture = new Map<string, NextMatchPick[]>();
+  const scorelinesByFixture = new Map<
+    string,
+    { homeGoals: number; awayGoals: number }[]
+  >();
   for (const p of groupPreds) {
     const list = byFixture.get(p.groupFixtureId) ?? [];
     list.push({
@@ -221,12 +238,19 @@ export async function getAllMatchesForViewer(
       text: `${p.homeGoals}-${p.awayGoals}`,
     });
     byFixture.set(p.groupFixtureId, list);
+    const scores = scorelinesByFixture.get(p.groupFixtureId) ?? [];
+    scores.push({ homeGoals: p.homeGoals, awayGoals: p.awayGoals });
+    scorelinesByFixture.set(p.groupFixtureId, scores);
   }
   const byMatch = new Map<number, NextMatchPick[]>();
+  const winnerIdsByMatch = new Map<number, string[]>();
   for (const p of koPreds) {
     const list = byMatch.get(p.matchNumber) ?? [];
     list.push({ displayName: p.user.displayName, text: p.predictedWinner.name });
     byMatch.set(p.matchNumber, list);
+    const ids = winnerIdsByMatch.get(p.matchNumber) ?? [];
+    ids.push(p.predictedWinnerTeamId);
+    winnerIdsByMatch.set(p.matchNumber, ids);
   }
 
   const sortByName = (picks: NextMatchPick[]) =>
@@ -240,12 +264,21 @@ export async function getAllMatchesForViewer(
         picks: groupVisible
           ? sortByName(byFixture.get(m.fixtureId ?? "") ?? [])
           : null,
+        aggregate: groupAggregate(
+          groupVisible,
+          scorelinesByFixture.get(m.fixtureId ?? "") ?? [],
+        ),
       };
     }
     return {
       ...m,
       picksVisible: koVisible,
       picks: koVisible ? sortByName(byMatch.get(m.matchNumber ?? -1) ?? []) : null,
+      aggregate: knockoutAggregate(
+        koVisible,
+        winnerIdsByMatch.get(m.matchNumber ?? -1) ?? [],
+        m.homeTeamId,
+      ),
     };
   });
 
