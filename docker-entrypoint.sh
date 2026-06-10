@@ -1,14 +1,20 @@
 #!/bin/sh
-# Container startup: bring the SQLite database up to date, ensure the fixed
-# reference data exists (idempotent), then start the server. Both Prisma steps
-# read DATABASE_URL from the environment.
 set -e
 
 echo "Applying database migrations..."
 npx prisma migrate deploy
 
-echo "Seeding reference data (idempotent)..."
-npx prisma db seed
+echo "Checking if database is already seeded..."
+
+# Check if any teams exist
+TEAM_COUNT=$(sqlite3 /data/prod.db "SELECT COUNT(*) FROM Team;" 2>/dev/null || echo 0)
+
+if [ "$TEAM_COUNT" -eq "0" ]; then
+  echo "Database empty → seeding..."
+  npx prisma db seed
+else
+  echo "Database already seeded → skipping seed"
+fi
 
 echo "Starting Next.js..."
 exec npm run start

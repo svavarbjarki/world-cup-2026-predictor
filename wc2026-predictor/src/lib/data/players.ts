@@ -102,7 +102,7 @@ export const PLAYERS: AwardPlayer[] = [
   { name: "Arda Güler", team: "Türkiye", position: "MF", age: 21, birthYear: 2005 },
   { name: "Kenan Yıldız", team: "Türkiye", position: "FW", age: 21, birthYear: 2005 },
   { name: "Antonio Nusa", team: "Norway", position: "FW", age: 21, birthYear: 2005 },
-  { name: "Yan Diomande", team: "Côte d'Ivoire", position: "FW", age: 20, birthYear: 2005 },
+  { name: "Yan Diomande", team: "Cote d'Ivoire", position: "FW", age: 20, birthYear: 2005 },
   { name: "Lucas Bergvall", team: "Sweden", position: "MF", age: 20, birthYear: 2006 },
   { name: "Kobbie Mainoo", team: "England", position: "MF", age: 21, birthYear: 2005 },
   { name: "Lennart Karl", team: "Germany", position: "MF", age: 18, birthYear: 2007 },
