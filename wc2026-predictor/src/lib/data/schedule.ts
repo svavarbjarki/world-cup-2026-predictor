@@ -47,9 +47,9 @@ export const GROUP_SCHEDULE: ScheduleMatch[] = [
   { stage: "D", homeTeam: "Australia", awayTeam: "Türkiye", kickoffUtc: "2026-06-14T08:00:00Z", venue: "BC Place, Vancouver" },
 
   // Sunday, June 14
-  { stage: "E", homeTeam: "Germany", awayTeam: "Curaçao", kickoffUtc: "2026-06-14T19:00:00Z", venue: "Houston Stadium, Houston" },
+  { stage: "E", homeTeam: "Germany", awayTeam: "Curacao", kickoffUtc: "2026-06-14T19:00:00Z", venue: "Houston Stadium, Houston" },
   { stage: "F", homeTeam: "Netherlands", awayTeam: "Japan", kickoffUtc: "2026-06-14T22:00:00Z", venue: "Dallas Stadium, Dallas" },
-  { stage: "E", homeTeam: "Côte d'Ivoire", awayTeam: "Ecuador", kickoffUtc: "2026-06-15T00:00:00Z", venue: "Philadelphia Stadium, Philadelphia" },
+  { stage: "E", homeTeam: "Cote d'Ivoire", awayTeam: "Ecuador", kickoffUtc: "2026-06-15T00:00:00Z", venue: "Philadelphia Stadium, Philadelphia" },
   { stage: "F", homeTeam: "Sweden", awayTeam: "Tunisia", kickoffUtc: "2026-06-15T04:00:00Z", venue: "Estadio Monterrey, Guadalupe" },
 
   // Monday, June 15
@@ -84,8 +84,8 @@ export const GROUP_SCHEDULE: ScheduleMatch[] = [
 
   // Saturday, June 20
   { stage: "F", homeTeam: "Netherlands", awayTeam: "Sweden", kickoffUtc: "2026-06-20T19:00:00Z", venue: "Houston Stadium, Houston" },
-  { stage: "E", homeTeam: "Germany", awayTeam: "Côte d'Ivoire", kickoffUtc: "2026-06-20T21:00:00Z", venue: "Toronto Stadium, Toronto" },
-  { stage: "E", homeTeam: "Ecuador", awayTeam: "Curaçao", kickoffUtc: "2026-06-21T04:00:00Z", venue: "Kansas City Stadium, Kansas City" },
+  { stage: "E", homeTeam: "Germany", awayTeam: "Cote d'Ivoire", kickoffUtc: "2026-06-20T21:00:00Z", venue: "Toronto Stadium, Toronto" },
+  { stage: "E", homeTeam: "Ecuador", awayTeam: "Curacao", kickoffUtc: "2026-06-21T04:00:00Z", venue: "Kansas City Stadium, Kansas City" },
   { stage: "F", homeTeam: "Tunisia", awayTeam: "Japan", kickoffUtc: "2026-06-21T06:00:00Z", venue: "Estadio Monterrey, Guadalupe" },
 
   // Sunday, June 21
@@ -116,7 +116,7 @@ export const GROUP_SCHEDULE: ScheduleMatch[] = [
 
   // Thursday, June 25
   { stage: "E", homeTeam: "Ecuador", awayTeam: "Germany", kickoffUtc: "2026-06-25T21:00:00Z", venue: "New York New Jersey Stadium, New Jersey" },
-  { stage: "E", homeTeam: "Curaçao", awayTeam: "Côte d'Ivoire", kickoffUtc: "2026-06-25T21:00:00Z", venue: "Philadelphia Stadium, Philadelphia" },
+  { stage: "E", homeTeam: "Curacao", awayTeam: "Cote d'Ivoire", kickoffUtc: "2026-06-25T21:00:00Z", venue: "Philadelphia Stadium, Philadelphia" },
   { stage: "F", homeTeam: "Japan", awayTeam: "Sweden", kickoffUtc: "2026-06-26T01:00:00Z", venue: "Dallas Stadium, Dallas" },
   { stage: "F", homeTeam: "Tunisia", awayTeam: "Netherlands", kickoffUtc: "2026-06-26T01:00:00Z", venue: "Kansas City Stadium, Kansas City" },
   { stage: "D", homeTeam: "Türkiye", awayTeam: "United States", kickoffUtc: "2026-06-26T06:00:00Z", venue: "Los Angeles Stadium, Los Angeles" },
