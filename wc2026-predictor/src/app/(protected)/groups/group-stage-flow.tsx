@@ -357,7 +357,7 @@ function MatchCard({
         <button
           type="submit"
           disabled={pending}
-          className="mt-5 w-full rounded-lg bg-blue-600 px-3 py-2 font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
+          className="mt-5 w-full rounded-lg bg-blue-600 px-3 py-2 font-medium text-[#0b0b0e] transition hover:bg-blue-700 disabled:opacity-50"
         >
           {pending
             ? "Saving..."
@@ -431,7 +431,7 @@ function StandingsPanel({
         </button>
         <button
           onClick={onContinue}
-          className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-[#0b0b0e] hover:bg-blue-700"
         >
           {isLastGroup || allComplete
             ? "Review all groups"
@@ -668,7 +668,7 @@ function LockedView({ state }: { state: GroupStageState }) {
         </p>
         <a
           href="/knockout"
-          className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-[#0b0b0e] hover:bg-blue-700"
         >
           Go to knockout predictions
         </a>

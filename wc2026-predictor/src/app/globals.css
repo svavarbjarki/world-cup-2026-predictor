@@ -1,33 +1,60 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* Force the World Cup 2026 dark theme everywhere, independent of the OS setting,
+   by making `dark:` a class variant and putting `dark` on <html>. The app is a
+   single near-black + gold theme, not a light/dark toggle. */
+@custom-variant dark (&:where(.dark, .dark *));
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+@theme {
+  /* Semantic palette (near-black base, gold accent, off-white text). */
+  --color-bg: #0b0b0e; /* deep near-black page base */
+  --color-surface: #16161b; /* lifted card surface */
+  --color-surface-raised: #1e1e25; /* raised / hover surface */
+  --color-border: #2a2a33; /* hairline border */
+  --color-gold: #c9a227; /* primary gold accent */
+  --color-gold-bright: #d4af37; /* gold hover / emphasis */
+  --color-text: #f5f5f2; /* off-white primary text */
+  --color-text-muted: #9a9a95; /* muted secondary text */
+
+  /* Remap the neutral scale the existing dark: card styles already use, so every
+     card becomes the lifted surface without touching each component. */
+  --color-neutral-950: #0b0b0e;
+  --color-neutral-900: #16161b;
+  --color-neutral-800: #1e1e25;
+
+  /* Remap the old blue accent to gold so primary buttons/links shift app-wide. */
+  --color-blue-600: #c9a227;
+  --color-blue-700: #d4af37;
+  --color-blue-500: #d4af37;
+  --color-blue-400: #d4af37;
+
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  /* A very faint gold glow at the top for a premium feel, no trademarked motif. */
+  background-image: radial-gradient(
+    120% 55% at 50% -12%,
+    rgba(201, 162, 39, 0.07),
+    transparent 60%
+  );
+  background-attachment: fixed;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   /* Respect iOS safe areas (notch in landscape, home bar at the bottom) so no
      content sits under the system UI. Paired with viewportFit "cover". */
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Headings get the bold, slightly condensed Archivo treatment, sentence case. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-archivo), var(--font-geist-sans), system-ui, sans-serif;
+  letter-spacing: -0.015em;
 }
 
 /* Comfortable, thumb-friendly tap target for the small score inputs without

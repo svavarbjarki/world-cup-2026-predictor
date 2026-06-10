@@ -103,9 +103,14 @@ export default async function Home() {
   return (
     <main className="mx-auto w-full max-w-2xl p-4 sm:p-6">
       <header className="mb-5 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Hi {user.displayName}</h1>
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gold">
+            World Cup 2026
+          </div>
+          <h1 className="text-2xl font-bold">Hi {user.displayName}</h1>
+        </div>
         <form action={logoutAction}>
-          <button className="rounded-lg border border-black/15 px-3 py-1.5 text-sm hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10">
+          <button className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-muted hover:bg-surface-raised">
             Log out
           </button>
         </form>
@@ -171,28 +176,49 @@ export default async function Home() {
               </tr>
             </thead>
             <tbody>
-              {leaderboard.map((row) => (
-                <tr
-                  key={row.userId}
-                  className="border-t border-black/5 dark:border-white/10"
-                >
-                  <td className="px-2 py-2.5 sm:px-3 text-black/50 dark:text-white/50">
-                    {row.rank}
-                  </td>
-                  <td className="px-2 py-2.5 sm:px-3">
-                    {row.displayName}
-                    {row.userId === user.id ? (
-                      <span className="ml-1 text-xs text-black/40">(you)</span>
-                    ) : null}
-                  </td>
-                  <td className="px-2 py-2.5 sm:px-3 text-center">{row.groupPoints}</td>
-                  <td className="px-2 py-2.5 sm:px-3 text-center">{row.knockoutPoints}</td>
-                  <td className="px-2 py-2.5 sm:px-3 text-center">{row.awardPoints}</td>
-                  <td className="px-2 py-2.5 sm:px-3 text-center font-semibold">
-                    {row.totalPoints}
-                  </td>
-                </tr>
-              ))}
+              {leaderboard.map((row) => {
+                // Gild the leader only once results give them a real lead.
+                const isLeader = row.rank === 1 && row.totalPoints > 0;
+                return (
+                  <tr
+                    key={row.userId}
+                    className={
+                      "border-t border-border " +
+                      (isLeader ? "bg-gold/10" : "")
+                    }
+                  >
+                    <td
+                      className={
+                        "px-2 py-2.5 sm:px-3 " +
+                        (isLeader
+                          ? "font-bold text-gold"
+                          : "text-text-muted")
+                      }
+                    >
+                      {row.rank}
+                    </td>
+                    <td className="px-2 py-2.5 sm:px-3">
+                      <span className={isLeader ? "font-semibold text-gold" : ""}>
+                        {row.displayName}
+                      </span>
+                      {row.userId === user.id ? (
+                        <span className="ml-1 text-xs text-text-muted">(you)</span>
+                      ) : null}
+                    </td>
+                    <td className="px-2 py-2.5 sm:px-3 text-center">{row.groupPoints}</td>
+                    <td className="px-2 py-2.5 sm:px-3 text-center">{row.knockoutPoints}</td>
+                    <td className="px-2 py-2.5 sm:px-3 text-center">{row.awardPoints}</td>
+                    <td
+                      className={
+                        "px-2 py-2.5 sm:px-3 text-center font-semibold " +
+                        (isLeader ? "text-gold" : "")
+                      }
+                    >
+                      {row.totalPoints}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

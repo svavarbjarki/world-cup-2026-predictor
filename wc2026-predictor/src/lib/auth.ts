@@ -106,7 +106,24 @@ export async function getCurrentUser(): Promise<User | null> {
   return user;
 }
 
-/** Clear both auth cookies (log out). Call only from a Server Action. */
+/**
+ * Log out by clearing the shared-password gate only. The per-user identity token
+ * (USER_COOKIE) is deliberately kept: it is the device's sole proof of identity
+ * (there are no per-user passwords), so deleting it would lock the user out for
+ * good. After this, the protected routes send them to /login, and re-entering the
+ * shared password drops them straight back in as the same player. Call only from
+ * a Server Action.
+ */
+export async function clearPasswordCookie(): Promise<void> {
+  (await cookies()).delete(PASSWORD_COOKIE);
+}
+
+/**
+ * Clear BOTH auth cookies, including the per-user identity token. This forgets
+ * who the device is, which cannot be safely recovered (claiming an existing name
+ * is rejected to prevent impersonation), so it is not used by the normal log-out
+ * flow. Kept for a deliberate full reset. Call only from a Server Action.
+ */
 export async function clearAuthCookies(): Promise<void> {
   const store = await cookies();
   store.delete(PASSWORD_COOKIE);

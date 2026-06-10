@@ -10,7 +10,7 @@ import {
   getCurrentUser,
   setUserCookie,
   generateUserToken,
-  clearAuthCookies,
+  clearPasswordCookie,
 } from "@/lib/auth";
 
 /** Step 1: check the shared password and open the gate. */
@@ -70,8 +70,15 @@ export async function claimNameAction(
   redirect("/");
 }
 
-/** Log out / switch user on this device by clearing both cookies. */
+/**
+ * Log out by dropping the shared-password gate, but keep the per-user identity
+ * token so the player can come back. Re-entering the shared password lands them
+ * straight back on the dashboard as the same user. We do not clear the identity
+ * token because there is no way to safely reclaim an existing name afterwards
+ * (that is blocked to prevent impersonation in this prediction pool), so clearing
+ * it would lock the user out permanently.
+ */
 export async function logoutAction(): Promise<void> {
-  await clearAuthCookies();
+  await clearPasswordCookie();
   redirect("/login");
 }

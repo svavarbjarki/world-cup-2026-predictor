@@ -214,7 +214,7 @@ function GroupResultRow({
       <button
         onClick={save}
         disabled={pending}
-        className="mt-2 w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 sm:w-auto"
+        className="mt-2 w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-[#0b0b0e] hover:bg-blue-700 disabled:opacity-50 sm:w-auto"
       >
         {pending ? "Saving..." : saved ? "Edit result" : "Save result"}
       </button>
@@ -254,8 +254,8 @@ function KnockoutResults({
         </p>
       ) : null}
       {state.championName ? (
-        <div className="rounded-xl border border-blue-300 bg-blue-50 p-3 text-center dark:border-blue-700/50 dark:bg-blue-950/40">
-          <div className="text-xs text-black/50 dark:text-white/50">Champion</div>
+        <div className="rounded-xl border border-amber-400 bg-gradient-to-b from-amber-50 to-amber-100 p-3 text-center text-amber-900 dark:border-amber-500/50 dark:from-amber-950/40 dark:to-amber-900/30 dark:text-amber-100">
+          <div className="text-xs opacity-70">Champion</div>
           <div className="text-lg font-bold">{state.championName}</div>
         </div>
       ) : null}
