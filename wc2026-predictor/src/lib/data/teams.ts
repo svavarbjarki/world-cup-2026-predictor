@@ -64,12 +64,12 @@ export const TEAMS: SeedTeam[] = [
   { name: "United States", isoCode: "us", group: "D", pot: 1, color: "#1A3668" },
   { name: "Paraguay", isoCode: "py", group: "D", pot: 3, color: "#D52B1E" },
   { name: "Australia", isoCode: "au", group: "D", pot: 2, color: "#00843D" },
-  { name: "Türkiye", isoCode: "tr", group: "D", pot: 4, color: "#E30A17" },
+  { name: "Turkey", isoCode: "tr", group: "D", pot: 4, color: "#E30A17" },
 
   // Group E
   { name: "Germany", isoCode: "de", group: "E", pot: 1, color: "#000000" },
   { name: "Curacao", isoCode: "cw", group: "E", pot: 4, color: "#002B7F" },
-  { name: "Côte d'Ivoire", isoCode: "ci", group: "E", pot: 3, color: "#FF8200" },
+  { name: "Cote d'Ivoire", isoCode: "ci", group: "E", pot: 3, color: "#FF8200" },
   { name: "Ecuador", isoCode: "ec", group: "E", pot: 2, color: "#FFD100" },
 
   // Group F

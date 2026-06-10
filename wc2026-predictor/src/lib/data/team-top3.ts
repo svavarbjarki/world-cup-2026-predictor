@@ -134,7 +134,7 @@ export const TEAM_TOP3: TeamTop3[] = [
     { name: "Tomáš Souček", position: "MF" },
     { name: "Ladislav Krejčí", position: "DF" },
   ]},
-  { team: "Türkiye", status: "confirmed", players: [
+  { team: "Turkey", status: "confirmed", players: [
     { name: "Arda Güler", position: "MF" },
     { name: "Hakan Çalhanoğlu", position: "MF" },
     { name: "Kenan Yıldız", position: "FW" },
@@ -164,7 +164,7 @@ export const TEAM_TOP3: TeamTop3[] = [
     { name: "Enner Valencia", position: "FW" },
     { name: "Pervis Estupiñán", position: "DF" },
   ]},
-  { team: "Côte d'Ivoire", status: "confirmed", players: [
+  { team: "Cote d'Ivoire", status: "confirmed", players: [
     { name: "Sébastien Haller", position: "FW" },
     { name: "Franck Kessié", position: "MF" },
     { name: "Simon Adingra", position: "FW" },
@@ -262,7 +262,7 @@ export const TEAM_TOP3: TeamTop3[] = [
     { name: "Zidane Iqbal", position: "MF" },
     { name: "Ali Jasim", position: "FW" },
   ]},
-  { team: "Curaçao", status: "confirmed", players: [
+  { team: "Curacao", status: "confirmed", players: [
     { name: "Tahith Chong", position: "MF" },
     { name: "Juninho Bacuna", position: "MF" },
     { name: "Jurgen Locadia", position: "FW" },

@@ -99,11 +99,18 @@ export const PLAYERS: AwardPlayer[] = [
   { name: "Désiré Doué", team: "France", position: "FW", age: 20, birthYear: 2005 },
   { name: "Warren Zaïre-Emery", team: "France", position: "MF", age: 20, birthYear: 2006 },
   { name: "Pau Cubarsí", team: "Spain", position: "DF", age: 19, birthYear: 2007 },
-  { name: "Arda Güler", team: "Türkiye", position: "MF", age: 21, birthYear: 2005 },
-  { name: "Kenan Yıldız", team: "Türkiye", position: "FW", age: 21, birthYear: 2005 },
+  { name: "Arda Güler", team: "Turkey", position: "MF", age: 21, birthYear: 2005 },
+  { name: "Kenan Yıldız", team: "Turkey", position: "FW", age: 21, birthYear: 2005 },
   { name: "Antonio Nusa", team: "Norway", position: "FW", age: 21, birthYear: 2005 },
-  { name: "Yan Diomande", team: "Côte d'Ivoire", position: "FW", age: 20, birthYear: 2005 },
+  { name: "Yan Diomande", team: "Cote d'Ivoire", position: "FW", age: 20, birthYear: 2005 },
   { name: "Lucas Bergvall", team: "Sweden", position: "MF", age: 20, birthYear: 2006 },
   { name: "Kobbie Mainoo", team: "England", position: "MF", age: 21, birthYear: 2005 },
   { name: "Lennart Karl", team: "Germany", position: "MF", age: 18, birthYear: 2007 },
+  { name: "Gilberto Mora", team: "Mexico", position: "MF", age: 17, birthYear: 2008 },
+  { name: "Johan Manzambi", team: "Switzerland", position: "MF", age: 20, birthYear: 2006 },
+  { name: "Nico Paz", team: "Argentina", position: "MF", age: 21, birthYear: 2005 },
+  { name: "Kerim Alajbegovic", team: "Bosnia and Herzegovina", position: "FW", age: 18, birthYear: 2007 },
+  { name: "Can Uzun", team: "Turkey", position: "MF", age: 20, birthYear: 2006 },
+  
+  
 ];
