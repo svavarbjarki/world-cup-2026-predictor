@@ -12,6 +12,7 @@ import type {
   KnockoutMatchView,
 } from "@/lib/predictions-types";
 import { BracketTree } from "./bracket-tree";
+import { TeamTopPlayers } from "../team-top-players";
 
 /** All matches across rounds, in official bracket order. */
 function allMatches(state: KnockoutBracketState): KnockoutMatchView[] {
@@ -318,6 +319,7 @@ function TeamPickButton({
     >
       <div className="text-base font-semibold">{name ?? "To be decided"}</div>
       <div className="text-xs text-black/50 dark:text-white/50">{label}</div>
+      <TeamTopPlayers team={name} />
     </button>
   );
 }

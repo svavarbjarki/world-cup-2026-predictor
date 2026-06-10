@@ -27,7 +27,7 @@ export function NameForm() {
           required
           minLength={2}
           maxLength={30}
-          placeholder="e.g. Sven"
+          placeholder="Your name."
           // Browser extensions may inject attributes onto this field before
           // hydration; ignore the resulting attribute mismatch.
           suppressHydrationWarning

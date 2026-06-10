@@ -6,6 +6,7 @@ import {
   saveMatchPredictionAction,
   lockGroupsAction,
 } from "@/lib/predictions-actions";
+import { TeamTopPlayers } from "../team-top-players";
 import type {
   GroupStageState,
   GroupView,
@@ -320,7 +321,10 @@ function MatchCard({
 
       <form onSubmit={submit}>
         <div className="flex items-center justify-between gap-3">
-          <div className="flex-1 text-right font-medium">{match.home.name}</div>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="font-medium">{match.home.name}</div>
+            <TeamTopPlayers team={match.home.name} />
+          </div>
           <input
             aria-label={`${match.home.name} goals`}
             type="number"
@@ -340,7 +344,10 @@ function MatchCard({
             onChange={(e) => setAway(e.target.value)}
             className="w-14 rounded-lg border border-black/15 bg-transparent px-2 py-2 text-center text-lg outline-none focus:border-blue-500 dark:border-white/20"
           />
-          <div className="flex-1 font-medium">{match.away.name}</div>
+          <div className="min-w-0 flex-1">
+            <div className="font-medium">{match.away.name}</div>
+            <TeamTopPlayers team={match.away.name} />
+          </div>
         </div>
 
         {localError ? (

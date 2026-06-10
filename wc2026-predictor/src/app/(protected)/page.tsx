@@ -142,9 +142,14 @@ export default async function Home() {
 
       {/* Matches (swipe through; opens on the next match, scroll back for played) */}
       <section className="mb-6">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
-          Matches
-        </h2>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
+            Matches
+          </h2>
+          <Link href="/matches" className="text-sm text-blue-600">
+            All matches &rarr;
+          </Link>
+        </div>
         <NextMatches matches={matchData.matches} nextIndex={matchData.nextIndex} />
       </section>
 
