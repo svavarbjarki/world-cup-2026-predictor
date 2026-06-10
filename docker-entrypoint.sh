@@ -4,16 +4,19 @@ set -e
 echo "Applying database migrations..."
 npx prisma migrate deploy
 
-echo "Checking if database is already seeded..."
+echo "Checking if database should be seeded..."
 
-# Check if any teams exist
-TEAM_COUNT=$(sqlite3 /data/prod.db "SELECT COUNT(*) FROM Team;" 2>/dev/null || echo 0)
+if [ -f /data/prod.db ]; then
+  USER_COUNT=$(sqlite3 /data/prod.db "SELECT COUNT(*) FROM User;" 2>/dev/null || echo 0)
+else
+  USER_COUNT=0
+fi
 
-if [ "$TEAM_COUNT" -eq "0" ]; then
-  echo "Database empty → seeding..."
+if [ "$USER_COUNT" -eq "0" ]; then
+  echo "No users found → running seed..."
   npx prisma db seed
 else
-  echo "Database already seeded → skipping seed"
+  echo "Users already exist → skipping seed"
 fi
 
 echo "Starting Next.js..."
