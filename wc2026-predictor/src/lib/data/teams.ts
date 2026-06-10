@@ -68,7 +68,7 @@ export const TEAMS: SeedTeam[] = [
 
   // Group E
   { name: "Germany", isoCode: "de", group: "E", pot: 1, color: "#000000" },
-  { name: "Curaçao", isoCode: "cw", group: "E", pot: 4, color: "#002B7F" },
+  { name: "Curacao", isoCode: "cw", group: "E", pot: 4, color: "#002B7F" },
   { name: "Côte d'Ivoire", isoCode: "ci", group: "E", pot: 3, color: "#FF8200" },
   { name: "Ecuador", isoCode: "ec", group: "E", pot: 2, color: "#FFD100" },
 
