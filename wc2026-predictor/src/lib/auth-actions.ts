@@ -11,6 +11,11 @@ import {
   setUserCookie,
   generateUserToken,
   clearPasswordCookie,
+  generateResumeCode,
+  verifyResumeCode,
+  setRevealCookie,
+  getRevealUser,
+  clearRevealCookie,
 } from "@/lib/auth";
 
 /** Step 1: check the shared password and open the gate. */
@@ -27,7 +32,12 @@ export async function loginAction(
   redirect("/name");
 }
 
-/** Step 2: claim (or fail to claim) a display name. */
+/**
+ * Step 2A ("I am new"): claim a display name and register a new user. Generates a
+ * resume code, then sends the user to the one-time code reveal screen. We do NOT
+ * set the real identity cookie yet; we set the reveal cookie instead, so the app
+ * stays gated until they confirm they saved the code (see /welcome).
+ */
 export async function claimNameAction(
   _prev: AuthActionState,
   formData: FormData,
@@ -48,25 +58,75 @@ export async function claimNameAction(
 
   const existing = await prisma.user.findUnique({ where: { displayName } });
   if (existing) {
-    // Name clash. Identity here is just a name, so we cannot prove this device
-    // belongs to the original claimer. To avoid two different people silently
-    // sharing one name, we reject rather than hand over the identity. The
-    // original owner resumes automatically via their device cookie (the per-user
-    // token); a genuine owner on a brand-new device must reuse their first
-    // device or pick a different name.
-    //
-    // Tradeoff: no frictionless cross-device resume without the original cookie,
-    // in exchange for zero silent identity collisions. That is the right call
-    // for a small group of trusted friends and avoids building a real account
-    // and recovery system.
-    return { error: "That name is already taken. Pick another one." };
+    // Name clash. A returning player should use the "I am returning" resume-code
+    // option instead, which proves identity. We reject blind name reuse so two
+    // different people can never silently share one name (and so nobody can take
+    // over another player's predictions just by typing their name).
+    return { error: "That name is already taken. If it is you, use your resume code." };
   }
 
   const token = generateUserToken();
+  const resumeCode = await generateResumeCode();
   const user = await prisma.user.create({
-    data: { displayName, sessionToken: token },
+    data: { displayName, sessionToken: token, resumeCode },
   });
+  await setRevealCookie(user.id, token);
+  redirect("/welcome");
+}
+
+/**
+ * Step 2B ("I am returning"): log in with a resume code. Looks the user up by
+ * code (case- and hyphen-insensitive), sets the identity cookie, and sends them
+ * straight into the app. No name entry and no code reveal.
+ */
+export async function resumeAction(
+  _prev: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  if (!(await isPasswordAuthed())) {
+    redirect("/login");
+  }
+  if (await getCurrentUser()) {
+    redirect("/");
+  }
+
+  const code = String(formData.get("resumeCode") ?? "");
+  const user = await verifyResumeCode(code);
+  if (!user) {
+    return { error: "That resume code did not match. Check it and try again." };
+  }
+
+  // The identity cookie verifies against the stored sessionToken, so make sure
+  // the user has one (older rows may not).
+  let token = user.sessionToken;
+  if (!token) {
+    token = generateUserToken();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { sessionToken: token },
+    });
+  }
   await setUserCookie(user.id, token);
+  redirect("/");
+}
+
+/**
+ * Step 3: the new user confirms they have saved their resume code. Promote the
+ * pending reveal identity to the real identity cookie, clear the reveal gate, and
+ * let them into the app.
+ */
+export async function confirmCodeAction(): Promise<void> {
+  if (!(await isPasswordAuthed())) {
+    redirect("/login");
+  }
+  const user = await getRevealUser();
+  if (!user || !user.sessionToken) {
+    // Nothing pending (already confirmed, or no reveal). Fall through to the app,
+    // where the normal cookie checks decide what they can see.
+    redirect("/");
+  }
+  await setUserCookie(user.id, user.sessionToken);
+  await clearRevealCookie();
   redirect("/");
 }
 

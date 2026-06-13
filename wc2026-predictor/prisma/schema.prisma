@@ -184,6 +184,14 @@ model User {
   /// without any login. Optional and intentionally simple.
   sessionToken String? @unique
 
+  /// Short, human-friendly resume code (format "XXXX-XXXX") that is the ground
+  /// truth identity for a user. It lets someone log back in from any device or
+  /// browser when their cookie is gone, without email or a per-user password.
+  /// Nullable so the column can be added to a table that already has users and
+  /// backfilled afterwards; any row still missing one is given a code silently on
+  /// its next cookie-based login. Always set in practice once backfilled.
+  resumeCode String? @unique
+
   groupPredictions    GroupPrediction[]
   knockoutPredictions KnockoutPrediction[]
   awardPrediction     AwardPrediction?

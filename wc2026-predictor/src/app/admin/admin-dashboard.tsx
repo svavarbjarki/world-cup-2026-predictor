@@ -10,6 +10,7 @@ interface AdminUser {
   groupStatus: string;
   knockoutStatus: string;
   awardsStatus: string;
+  resumeCode: string | null;
   createdAt: string;
 }
 
@@ -124,6 +125,40 @@ export function AdminDashboard({ users }: { users: AdminUser[] }) {
                     Remove
                   </button>
                 )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="mt-6">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
+          User resume codes
+        </h2>
+        <p className="mb-2 text-xs text-black/45 dark:text-white/45">
+          Relay a code to a player who lost theirs. Treat these as secrets.
+        </p>
+        {list.length === 0 ? (
+          <p className="text-sm text-black/50 dark:text-white/50">
+            No players yet.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {list.map((u) => (
+              <li
+                key={u.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-black/10 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-neutral-900"
+              >
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{u.displayName}</div>
+                  <div className="mt-0.5 text-xs text-black/45 dark:text-white/45">
+                    Groups {u.groupStatus} | KO {u.knockoutStatus} | Awards{" "}
+                    {u.awardsStatus}
+                  </div>
+                </div>
+                <code className="shrink-0 rounded-md bg-black/5 px-2 py-1 font-mono text-sm tracking-wider dark:bg-white/10">
+                  {u.resumeCode ?? "not set"}
+                </code>
               </li>
             ))}
           </ul>

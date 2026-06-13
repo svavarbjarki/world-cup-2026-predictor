@@ -6,13 +6,20 @@
 
 import { prisma } from "@/lib/prisma";
 import { hasSubmitted, canSeeOthersPredictions } from "@/lib/visibility";
-import { getGroupStageState, getKnockoutBracketState } from "@/lib/predictions";
+import {
+  getGroupStageState,
+  getKnockoutBracketState,
+  getRealKnockoutBracket,
+} from "@/lib/predictions";
 import { resolveAwardPicks, type ResolvedAwardPicks } from "@/lib/awards-server";
 import {
   groupAggregate,
   knockoutAggregate,
   type MatchAggregate,
 } from "@/lib/aggregates";
+import { matchOutcome } from "@/lib/engine/outcome";
+import { rawTeamColor } from "@/lib/team-colors";
+import type { ResolvedBracket } from "@/lib/engine/advanceBracket";
 import type {
   GroupStageState,
   KnockoutBracketState,
@@ -49,6 +56,12 @@ export interface NextMatchPick {
   displayName: string;
   /** "2-1" for a group score, or a team name for a knockout pick. */
   text: string;
+  /**
+   * Hex colour of the team this pick favours (the predicted winner, or the team
+   * favoured by a group scoreline), used to tint the pick. Null for a draw or when
+   * the team has no colour, so the UI falls back to a neutral style.
+   */
+  color: string | null;
 }
 
 export interface NextMatchView {
@@ -226,16 +239,39 @@ export async function getAllMatchesForViewer(
       : Promise.resolve([]),
   ]);
 
+  // Resolve each match's teams so a pick can be tinted with the favoured team's
+  // colour (the predicted winner for knockout; the team a scoreline favours for
+  // group, neutral for a draw).
+  const baseByFixture = new Map(
+    all.filter((m) => m.fixtureId).map((m) => [m.fixtureId!, m]),
+  );
+  const baseByMatch = new Map(
+    all.filter((m) => m.matchNumber != null).map((m) => [m.matchNumber!, m]),
+  );
+
   const byFixture = new Map<string, NextMatchPick[]>();
   const scorelinesByFixture = new Map<
     string,
     { homeGoals: number; awayGoals: number }[]
   >();
   for (const p of groupPreds) {
+    const base = baseByFixture.get(p.groupFixtureId);
+    const outcome = matchOutcome({
+      homeGoals: p.homeGoals,
+      awayGoals: p.awayGoals,
+    });
+    const color = !base
+      ? null
+      : outcome === "home"
+        ? rawTeamColor(base.home.isoCode)
+        : outcome === "away"
+          ? rawTeamColor(base.away.isoCode)
+          : null; // draw stays neutral
     const list = byFixture.get(p.groupFixtureId) ?? [];
     list.push({
       displayName: p.user.displayName,
       text: `${p.homeGoals}-${p.awayGoals}`,
+      color,
     });
     byFixture.set(p.groupFixtureId, list);
     const scores = scorelinesByFixture.get(p.groupFixtureId) ?? [];
@@ -245,8 +281,18 @@ export async function getAllMatchesForViewer(
   const byMatch = new Map<number, NextMatchPick[]>();
   const winnerIdsByMatch = new Map<number, string[]>();
   for (const p of koPreds) {
+    const base = baseByMatch.get(p.matchNumber);
+    const color = !base
+      ? null
+      : p.predictedWinnerTeamId === base.homeTeamId
+        ? rawTeamColor(base.home.isoCode)
+        : rawTeamColor(base.away.isoCode);
     const list = byMatch.get(p.matchNumber) ?? [];
-    list.push({ displayName: p.user.displayName, text: p.predictedWinner.name });
+    list.push({
+      displayName: p.user.displayName,
+      text: p.predictedWinner.name,
+      color,
+    });
     byMatch.set(p.matchNumber, list);
     const ids = winnerIdsByMatch.get(p.matchNumber) ?? [];
     ids.push(p.predictedWinnerTeamId);
@@ -287,6 +333,74 @@ export async function getAllMatchesForViewer(
     firstUnplayed === -1 ? Math.max(0, matches.length - 1) : firstUnplayed;
 
   return { matches, nextIndex };
+}
+
+/** Official match number of the Final. The picked winner of it is the champion. */
+const FINAL_MATCH_NUMBER = 104;
+
+export interface PredictedChampion {
+  /** Team id (also the isoCode) of the predicted champion. */
+  teamId: string;
+  name: string;
+  isoCode: string;
+  /** True once that team has lost a real, entered knockout match. */
+  eliminated: boolean;
+}
+
+/**
+ * Teams that have been knocked out in the real tournament so far: in any real
+ * knockout match that has a recorded winner, the other participant is eliminated.
+ * Derived from the SAME resolved real bracket used elsewhere, so later-round
+ * matchups (and therefore losers) form as earlier winners are entered.
+ */
+function eliminatedTeamIds(resolved: ResolvedBracket | null): Set<string> {
+  const out = new Set<string>();
+  if (!resolved) return out;
+  for (const round of resolved.rounds) {
+    for (const m of round.matches) {
+      if (m.pick == null) continue;
+      for (const side of [m.teamA, m.teamB]) {
+        if (side.teamId != null && side.teamId !== m.pick) out.add(side.teamId);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The predicted tournament champion (winner of the Final) for every user who has
+ * SUBMITTED their knockout bracket, keyed by userId, with whether that team has
+ * already been eliminated in the real tournament. Users who have not submitted are
+ * absent from the map, so the leaderboard shows nothing for them.
+ */
+export async function getPredictedChampions(): Promise<
+  Map<string, PredictedChampion>
+> {
+  const [finalPicks, realBracket] = await Promise.all([
+    prisma.knockoutPrediction.findMany({
+      where: {
+        matchNumber: FINAL_MATCH_NUMBER,
+        user: { knockoutStatus: "SUBMITTED" },
+      },
+      include: {
+        predictedWinner: { select: { id: true, name: true, isoCode: true } },
+      },
+    }),
+    getRealKnockoutBracket(),
+  ]);
+
+  const eliminated = eliminatedTeamIds(realBracket?.resolved ?? null);
+
+  const byUser = new Map<string, PredictedChampion>();
+  for (const p of finalPicks) {
+    byUser.set(p.userId, {
+      teamId: p.predictedWinnerTeamId,
+      name: p.predictedWinner.name,
+      isoCode: p.predictedWinner.isoCode,
+      eliminated: eliminated.has(p.predictedWinnerTeamId),
+    });
+  }
+  return byUser;
 }
 
 export interface OtherPlayerView {

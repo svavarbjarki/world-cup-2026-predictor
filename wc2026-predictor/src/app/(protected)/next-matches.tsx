@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { CSSProperties } from "react";
 import { flagEmoji } from "@/lib/data/teams";
+import { rawTeamColor } from "@/lib/team-colors";
 import type { NextMatchView } from "@/lib/hub";
 import { MatchAggregateBar } from "./match-aggregate-bar";
 
@@ -11,6 +13,34 @@ function Flag({ isoCode }: { isoCode: string }) {
       {flagEmoji(isoCode)}
     </span>
   );
+}
+
+/**
+ * Parse a "#RRGGBB" hex string into its rgb triple, or null when missing or
+ * malformed. Tailwind cannot generate arbitrary colour classes at runtime, so the
+ * team colours are applied as inline rgb()/rgba() styles built from this.
+ */
+function hexToRgb(hex: string | null): { r: number; g: number; b: number } | null {
+  if (!hex) return null;
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff };
+}
+
+/** A faint team-colour background tint, or undefined to keep the neutral style. */
+function tintStyle(color: string | null): CSSProperties | undefined {
+  const rgb = hexToRgb(color);
+  if (!rgb) return undefined;
+  // Roughly 22% opacity so text stays readable over the near-black surface.
+  return { backgroundColor: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.22)` };
+}
+
+/** Full-opacity team colour for a label, or undefined to inherit the default. */
+function labelStyle(color: string | null): CSSProperties | undefined {
+  const rgb = hexToRgb(color);
+  if (!rgb) return undefined;
+  return { color: `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})` };
 }
 
 /**
@@ -71,12 +101,12 @@ export function NextMatches({
               </span>
             </div>
             <div className="mt-2 flex items-center justify-center gap-3 text-lg font-medium">
-              <span>
+              <span style={labelStyle(rawTeamColor(m.home.isoCode))}>
                 <Flag isoCode={m.home.isoCode} />
                 {m.home.name}
               </span>
               <span className="text-black/30">vs</span>
-              <span>
+              <span style={labelStyle(rawTeamColor(m.away.isoCode))}>
                 <Flag isoCode={m.away.isoCode} />
                 {m.away.name}
               </span>
@@ -102,11 +132,17 @@ export function NextMatches({
                 m.picks && m.picks.length > 0 ? (
                   <ul className="mt-3 space-y-1 text-sm">
                     {m.picks.map((p) => (
-                      <li key={p.displayName} className="text-center">
+                      <li
+                        key={p.displayName}
+                        className="rounded px-2 py-1 text-center"
+                        style={tintStyle(p.color)}
+                      >
                         <span className="text-black/60 dark:text-white/60">
                           {p.displayName}
                         </span>
-                        <div className="font-medium">{p.text}</div>
+                        <div className="font-medium" style={labelStyle(p.color)}>
+                          {p.text}
+                        </div>
                       </li>
                     ))}
                   </ul>
