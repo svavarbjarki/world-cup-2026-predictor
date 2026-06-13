@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { logoutAction } from "@/lib/auth-actions";
-import { getPlayers, getAllMatchesForViewer } from "@/lib/hub";
+import {
+  getPlayers,
+  getAllMatchesForViewer,
+  getPredictedChampions,
+} from "@/lib/hub";
 import { getLeaderboard } from "@/lib/leaderboard";
+import { flagEmoji } from "@/lib/data/teams";
 import { prisma } from "@/lib/prisma";
 import { NextMatches } from "./next-matches";
 
@@ -31,6 +36,32 @@ function StatusChip({
   return (
     <span className={`rounded font-medium ${size} ${tone}`}>
       {statusLabel(status)}
+    </span>
+  );
+}
+
+// Compact inline badge of a user's predicted tournament champion (team flag +
+// name). Greyed with a strikethrough once that team is knocked out in real life.
+// Colours come from the theme token classes only.
+function ChampionBadge({
+  name,
+  isoCode,
+  eliminated,
+}: {
+  name: string;
+  isoCode: string;
+  eliminated: boolean;
+}) {
+  return (
+    <span
+      title={eliminated ? `${name} (knocked out)` : name}
+      className={
+        "ml-2 inline-flex items-center gap-1 rounded bg-surface-raised px-1.5 py-0.5 align-middle text-[11px] font-medium " +
+        (eliminated ? "text-text-muted opacity-70" : "text-text")
+      }
+    >
+      <span aria-hidden>{flagEmoji(isoCode)}</span>
+      <span className={eliminated ? "line-through" : ""}>{name}</span>
     </span>
   );
 }
@@ -79,12 +110,14 @@ export default async function Home() {
   const user = await getCurrentUser();
   if (!user) return null; // layout guarantees a user; satisfy types
 
-  const [players, leaderboard, matchData, settings] = await Promise.all([
-    getPlayers(),
-    getLeaderboard(),
-    getAllMatchesForViewer(user.id),
-    prisma.settings.findUnique({ where: { id: 1 } }),
-  ]);
+  const [players, leaderboard, matchData, settings, champions] =
+    await Promise.all([
+      getPlayers(),
+      getLeaderboard(),
+      getAllMatchesForViewer(user.id),
+      prisma.settings.findUnique({ where: { id: 1 } }),
+      getPredictedChampions(),
+    ]);
 
   // Availability of each prediction section (color the nav buttons green/red).
   // "Available" means the section is open to use, regardless of your own
@@ -179,6 +212,7 @@ export default async function Home() {
               {leaderboard.map((row) => {
                 // Gild the leader only once results give them a real lead.
                 const isLeader = row.rank === 1 && row.totalPoints > 0;
+                const champion = champions.get(row.userId);
                 return (
                   <tr
                     key={row.userId}
@@ -197,12 +231,19 @@ export default async function Home() {
                     >
                       {row.rank}
                     </td>
-                    <td className="px-2 py-2.5 sm:px-3">
+                    <td className="whitespace-nowrap px-2 py-2.5 sm:px-3">
                       <span className={isLeader ? "font-semibold text-gold" : ""}>
                         {row.displayName}
                       </span>
                       {row.userId === user.id ? (
                         <span className="ml-1 text-xs text-text-muted">(you)</span>
+                      ) : null}
+                      {champion ? (
+                        <ChampionBadge
+                          name={champion.name}
+                          isoCode={champion.isoCode}
+                          eliminated={champion.eliminated}
+                        />
                       ) : null}
                     </td>
                     <td className="px-2 py-2.5 sm:px-3 text-center">{row.groupPoints}</td>

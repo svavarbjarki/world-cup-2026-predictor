@@ -14,6 +14,16 @@ export function getTeamColor(isoCode: string): string {
 }
 
 /**
+ * The team's primary colour (hex), or null when the team is unknown or its colour
+ * is missing / empty. Callers that want to degrade to a neutral style (rather than
+ * tint with a fallback gray) use this and skip the tint when it is null.
+ */
+export function rawTeamColor(isoCode: string): string | null {
+  const c = colorByIso.get(isoCode);
+  return c && c.length > 0 ? c : null;
+}
+
+/**
  * Black or white text that reads on the given hex background, by relative
  * luminance. Used for the percentage label drawn inside a coloured bar segment.
  */
