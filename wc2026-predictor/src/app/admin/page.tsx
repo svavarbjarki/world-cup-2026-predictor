@@ -21,6 +21,7 @@ export default async function AdminPage() {
       groupStatus: true,
       knockoutStatus: true,
       awardsStatus: true,
+      resumeCode: true,
       createdAt: true,
     },
   });

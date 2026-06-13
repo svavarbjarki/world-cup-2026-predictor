@@ -13,6 +13,9 @@ import { prisma } from "@/lib/prisma";
 const PASSWORD_COOKIE = "wc_pw";
 /** Cookie that identifies the current user as "<userId>.<secret token>". */
 const USER_COOKIE = "wc_user";
+/** Temporary cookie marking a new user who must view + confirm their resume code
+ *  before entering the app. Same "<userId>.<token>" value shape as USER_COOKIE. */
+const REVEAL_COOKIE = "wc_reveal";
 /** Cookie that marks a session as organizer-authenticated for /admin. */
 const ADMIN_COOKIE = "wc_admin";
 /** Cookie lifetime: long enough to cover the whole tournament. */
@@ -78,6 +81,46 @@ export function generateUserToken(): string {
   return randomBytes(32).toString("hex");
 }
 
+// Uppercase alphanumeric with the ambiguous characters removed (no 0, O, I, 1).
+// Exactly 32 symbols, so a random byte taken modulo the length is unbiased.
+const RESUME_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+
+/** Build one candidate code: 8 symbols formatted as "XXXX-XXXX". */
+function randomResumeCode(): string {
+  const bytes = randomBytes(8);
+  let raw = "";
+  for (let i = 0; i < bytes.length; i++) {
+    raw += RESUME_CODE_ALPHABET[bytes[i] % RESUME_CODE_ALPHABET.length];
+  }
+  return `${raw.slice(0, 4)}-${raw.slice(4)}`;
+}
+
+/**
+ * Generate a unique resume code (8 uppercase alphanumeric chars, no ambiguous
+ * characters, formatted "XXXX-XXXX"). Checks the database and retries on the
+ * astronomically unlikely collision. Uses crypto randomness, never Math.random.
+ */
+export async function generateResumeCode(): Promise<string> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const code = randomResumeCode();
+    const clash = await prisma.user.findUnique({ where: { resumeCode: code } });
+    if (!clash) return code;
+  }
+  throw new Error("Could not generate a unique resume code after several tries.");
+}
+
+/**
+ * Look up a user by their resume code. Input is normalized first (hyphens and
+ * spaces dropped, uppercased) so user typos in spacing or case still match, since
+ * stored codes are always the canonical "XXXX-XXXX" form. Returns the User or null.
+ */
+export async function verifyResumeCode(code: string): Promise<User | null> {
+  const cleaned = code.replace(/[^0-9a-zA-Z]/g, "").toUpperCase();
+  if (cleaned.length !== 8) return null;
+  const canonical = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
+  return prisma.user.findUnique({ where: { resumeCode: canonical } });
+}
+
 /** Identify the current user on this device. Call only from a Server Action. */
 export async function setUserCookie(userId: string, token: string): Promise<void> {
   // userId and the secret token are stored together. The token is a random
@@ -87,11 +130,11 @@ export async function setUserCookie(userId: string, token: string): Promise<void
 }
 
 /**
- * Load the current user from the device cookie, verifying the per-user token
- * against the database. Returns null if there is no valid identity.
+ * Resolve a "<userId>.<token>" cookie value to a verified user, checking the
+ * per-user token against the database. Returns null for any missing, malformed,
+ * or non-matching value. Shared by the identity and reveal cookies.
  */
-export async function getCurrentUser(): Promise<User | null> {
-  const raw = (await cookies()).get(USER_COOKIE)?.value;
+async function userFromCookieValue(raw: string | undefined): Promise<User | null> {
   if (!raw) return null;
 
   const separator = raw.indexOf(".");
@@ -103,6 +146,25 @@ export async function getCurrentUser(): Promise<User | null> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || !user.sessionToken) return null;
   if (!safeEqual(token, user.sessionToken)) return null;
+  return user;
+}
+
+/**
+ * Load the current user from the device cookie, verifying the per-user token
+ * against the database. Returns null if there is no valid identity.
+ */
+export async function getCurrentUser(): Promise<User | null> {
+  const user = await userFromCookieValue((await cookies()).get(USER_COOKIE)?.value);
+  if (!user) return null;
+
+  // Edge case: a pre-migration row the backfill missed has no resume code. Mint
+  // one silently on this cookie-based login and persist it, so every active user
+  // ends up with a recoverable code. The happy path (code already present) is
+  // unchanged.
+  if (!user.resumeCode) {
+    const resumeCode = await generateResumeCode();
+    return prisma.user.update({ where: { id: user.id }, data: { resumeCode } });
+  }
   return user;
 }
 
@@ -128,6 +190,39 @@ export async function clearAuthCookies(): Promise<void> {
   const store = await cookies();
   store.delete(PASSWORD_COOKIE);
   store.delete(USER_COOKIE);
+}
+
+// ---------------------------------------------------------------------------
+// First-registration resume-code reveal gate.
+//
+// After a brand new user registers we must show them their resume code once and
+// make them confirm before they can use the app. We do NOT set the real identity
+// cookie yet; instead we set this separate cookie (same verifiable
+// "<userId>.<token>" value, but under a name the protected layout does not honor).
+// The app therefore stays gated by the existing "no identity cookie" redirect
+// until the user confirms, at which point we promote them to the real identity
+// cookie and clear this one. A normal returning user never has this cookie, so
+// they never see the reveal screen.
+// ---------------------------------------------------------------------------
+
+/** Mark a freshly registered user as awaiting resume-code confirmation. */
+export async function setRevealCookie(userId: string, token: string): Promise<void> {
+  (await cookies()).set(REVEAL_COOKIE, `${userId}.${token}`, baseCookieOptions());
+}
+
+/** Load the user awaiting code confirmation, or null when there is none. */
+export async function getRevealUser(): Promise<User | null> {
+  return userFromCookieValue((await cookies()).get(REVEAL_COOKIE)?.value);
+}
+
+/** Is a resume-code reveal currently pending on this device? */
+export async function isRevealPending(): Promise<boolean> {
+  return (await cookies()).get(REVEAL_COOKIE)?.value !== undefined;
+}
+
+/** Clear the reveal gate once the user has saved their code. */
+export async function clearRevealCookie(): Promise<void> {
+  (await cookies()).delete(REVEAL_COOKIE);
 }
 
 // ---------------------------------------------------------------------------
