@@ -137,12 +137,10 @@ export function NextMatches({
                         className="rounded px-2 py-1 text-center"
                         style={tintStyle(p.color)}
                       >
-                        <span className="text-black/60 dark:text-white/60">
-                          {p.displayName}
-                        </span>
-                        <div className="font-medium" style={labelStyle(p.color)}>
-                          {p.text}
-                        </div>
+                        {/* White text over the team-colour tint reads cleanly
+                            regardless of the team's colour. */}
+                        <span className="text-white/70">{p.displayName}</span>
+                        <div className="font-medium text-white">{p.text}</div>
                       </li>
                     ))}
                   </ul>
