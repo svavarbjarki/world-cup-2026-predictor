@@ -12,13 +12,25 @@ import {
 } from "@/lib/engine/scoring";
 import {
   computeLeaderboard,
+  type LeaderboardInput,
   type LeaderboardRow,
 } from "@/lib/leaderboard-compute";
 
 export type { LeaderboardRow } from "@/lib/leaderboard-compute";
 
-/** Load everything the leaderboard needs and compute it on the fly. */
-export async function getLeaderboard(): Promise<LeaderboardRow[]> {
+/** Which single result the admin entered most recently, for the movement delta. */
+type MostRecentResult =
+  | { type: "group"; key: string }
+  | { type: "knockout"; key: number }
+  | null;
+
+interface LoadedLeaderboard {
+  input: LeaderboardInput;
+  mostRecent: MostRecentResult;
+}
+
+/** Load every input the leaderboard needs, plus which result was entered last. */
+async function loadLeaderboard(): Promise<LoadedLeaderboard> {
   const [
     users,
     groupPreds,
@@ -39,13 +51,18 @@ export async function getLeaderboard(): Promise<LeaderboardRow[]> {
       },
     }),
     prisma.groupResult.findMany({
-      select: { groupFixtureId: true, homeGoals: true, awayGoals: true },
+      select: {
+        groupFixtureId: true,
+        homeGoals: true,
+        awayGoals: true,
+        enteredAt: true,
+      },
     }),
     prisma.knockoutPrediction.findMany({
       select: { userId: true, matchNumber: true, predictedWinnerTeamId: true },
     }),
     prisma.knockoutResult.findMany({
-      select: { matchNumber: true, actualWinnerTeamId: true },
+      select: { matchNumber: true, actualWinnerTeamId: true, enteredAt: true },
     }),
     prisma.awardPrediction.findMany({
       select: {
@@ -75,7 +92,23 @@ export async function getLeaderboard(): Promise<LeaderboardRow[]> {
       }
     : DEFAULT_KNOCKOUT_SCORING;
 
-  return computeLeaderboard({
+  // The most recently entered result across both result tables, by enteredAt.
+  let mostRecent: MostRecentResult = null;
+  let mostRecentAt = -Infinity;
+  for (const r of groupResults) {
+    if (r.enteredAt.getTime() > mostRecentAt) {
+      mostRecentAt = r.enteredAt.getTime();
+      mostRecent = { type: "group", key: r.groupFixtureId };
+    }
+  }
+  for (const r of koResults) {
+    if (r.enteredAt.getTime() > mostRecentAt) {
+      mostRecentAt = r.enteredAt.getTime();
+      mostRecent = { type: "knockout", key: r.matchNumber };
+    }
+  }
+
+  const input: LeaderboardInput = {
     users,
     groupPredictions: groupPreds.map((p) => ({
       userId: p.userId,
@@ -106,5 +139,75 @@ export async function getLeaderboard(): Promise<LeaderboardRow[]> {
     groupConfig,
     knockoutConfig,
     awardPoints: settings ? settings.awardPoints : 5,
-  });
+  };
+
+  return { input, mostRecent };
+}
+
+/** Load everything the leaderboard needs and compute it on the fly. */
+export async function getLeaderboard(): Promise<LeaderboardRow[]> {
+  const { input } = await loadLeaderboard();
+  return computeLeaderboard(input);
+}
+
+/** A player's change since the most recently entered result. */
+export interface LeaderboardMovement {
+  /** Rank change versus the standing before the most recent result. */
+  direction: "up" | "down" | "same";
+  /** Points this player earned from that single most recent result. */
+  points: number;
+}
+
+export interface LeaderboardWithMovement {
+  rows: LeaderboardRow[];
+  /**
+   * Per-user movement keyed by userId. Empty when no result has been entered yet
+   * (so the UI shows no arrows). Derived by recomputing the standing with the most
+   * recent result removed and comparing rank and total to the current standing.
+   */
+  movement: Map<string, LeaderboardMovement>;
+}
+
+/**
+ * The leaderboard plus how each player moved after the most recently entered
+ * match result. The previous standing is the current inputs with that one result
+ * removed; since scoring is per match, the total delta equals the points that
+ * result awarded each player, and the rank delta gives the up/down/same arrow.
+ */
+export async function getLeaderboardWithMovement(): Promise<LeaderboardWithMovement> {
+  const { input, mostRecent } = await loadLeaderboard();
+  const rows = computeLeaderboard(input);
+
+  const movement = new Map<string, LeaderboardMovement>();
+  if (!mostRecent) return { rows, movement };
+
+  // Recompute the standing as it was BEFORE the most recent result, by dropping
+  // just that result from the inputs.
+  let previousInput: LeaderboardInput;
+  if (mostRecent.type === "group") {
+    const groupResults = new Map(input.groupResults);
+    groupResults.delete(mostRecent.key);
+    previousInput = { ...input, groupResults };
+  } else {
+    const knockoutResults = new Map(input.knockoutResults);
+    knockoutResults.delete(mostRecent.key);
+    previousInput = { ...input, knockoutResults };
+  }
+
+  const previous = computeLeaderboard(previousInput);
+  const prevRank = new Map(previous.map((r) => [r.userId, r.rank]));
+  const prevTotal = new Map(previous.map((r) => [r.userId, r.totalPoints]));
+
+  for (const row of rows) {
+    const beforeRank = prevRank.get(row.userId) ?? row.rank;
+    const beforeTotal = prevTotal.get(row.userId) ?? row.totalPoints;
+    const direction =
+      row.rank < beforeRank ? "up" : row.rank > beforeRank ? "down" : "same";
+    movement.set(row.userId, {
+      direction,
+      points: row.totalPoints - beforeTotal,
+    });
+  }
+
+  return { rows, movement };
 }

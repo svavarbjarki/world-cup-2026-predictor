@@ -403,6 +403,108 @@ export async function getPredictedChampions(): Promise<
   return byUser;
 }
 
+export interface ChampionPick {
+  displayName: string;
+  teamName: string;
+  isoCode: string;
+}
+
+/**
+ * Every submitted player's predicted tournament winner (the team they picked in
+ * the Final), for the champion-pick carousel. Only users who have submitted their
+ * knockout bracket have a Final pick, so the list is empty until at least one has,
+ * and the caller hides the section. Sorted by display name for a stable order.
+ */
+export async function getChampionPicks(): Promise<ChampionPick[]> {
+  const picks = await prisma.knockoutPrediction.findMany({
+    where: {
+      matchNumber: FINAL_MATCH_NUMBER,
+      user: { knockoutStatus: "SUBMITTED" },
+    },
+    include: {
+      user: { select: { displayName: true } },
+      predictedWinner: { select: { name: true, isoCode: true } },
+    },
+  });
+  return picks
+    .map((p) => ({
+      displayName: p.user.displayName,
+      teamName: p.predictedWinner.name,
+      isoCode: p.predictedWinner.isoCode,
+    }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
+export interface PerfectScoreShoutout {
+  homeName: string;
+  awayName: string;
+  homeIso: string;
+  awayIso: string;
+  homeGoals: number;
+  awayGoals: number;
+  /** Display names of every submitted user who nailed the exact scoreline. */
+  players: string[];
+}
+
+/**
+ * Shoutout for the most recently completed real GROUP match: the players who
+ * predicted its exact scoreline. Knockout matches are excluded because they have
+ * no scoreline to match. "Most recent" is the group fixture with a result and the
+ * latest kickoff time (fixtures with no kickoff time sort last, tie-broken by
+ * match number). Returns null when there is no completed group match yet or nobody
+ * got the exact score, so the caller hides the section.
+ */
+export async function getLastMatchPerfectScores(): Promise<PerfectScoreShoutout | null> {
+  const results = await prisma.groupResult.findMany({
+    select: {
+      homeGoals: true,
+      awayGoals: true,
+      groupFixture: {
+        select: {
+          id: true,
+          kickoffAt: true,
+          matchNumber: true,
+          homeTeam: { select: { name: true, isoCode: true } },
+          awayTeam: { select: { name: true, isoCode: true } },
+        },
+      },
+    },
+  });
+  if (results.length === 0) return null;
+
+  // Latest by kickoff time (unknown kickoff sorts last), then by match number.
+  const latest = results.reduce((best, r) => {
+    const a = r.groupFixture.kickoffAt?.getTime() ?? -Infinity;
+    const b = best.groupFixture.kickoffAt?.getTime() ?? -Infinity;
+    if (a !== b) return a > b ? r : best;
+    return r.groupFixture.matchNumber > best.groupFixture.matchNumber ? r : best;
+  }, results[0]);
+
+  const f = latest.groupFixture;
+  const exactPreds = await prisma.groupPrediction.findMany({
+    where: {
+      groupFixtureId: f.id,
+      homeGoals: latest.homeGoals,
+      awayGoals: latest.awayGoals,
+      user: { groupStatus: "SUBMITTED" },
+    },
+    include: { user: { select: { displayName: true } } },
+  });
+  if (exactPreds.length === 0) return null;
+
+  return {
+    homeName: f.homeTeam.name,
+    awayName: f.awayTeam.name,
+    homeIso: f.homeTeam.isoCode,
+    awayIso: f.awayTeam.isoCode,
+    homeGoals: latest.homeGoals,
+    awayGoals: latest.awayGoals,
+    players: exactPreds
+      .map((p) => p.user.displayName)
+      .sort((a, b) => a.localeCompare(b)),
+  };
+}
+
 export interface OtherPlayerView {
   target: { id: string; displayName: string } | null;
   group: {

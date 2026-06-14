@@ -5,11 +5,14 @@ import {
   getPlayers,
   getAllMatchesForViewer,
   getPredictedChampions,
+  getLastMatchPerfectScores,
+  getChampionPicks,
 } from "@/lib/hub";
-import { getLeaderboard } from "@/lib/leaderboard";
+import { getLeaderboardWithMovement } from "@/lib/leaderboard";
 import { flagEmoji } from "@/lib/data/teams";
 import { prisma } from "@/lib/prisma";
 import { NextMatches } from "./next-matches";
+import { ChampionCarousel } from "./champion-carousel";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +69,43 @@ function ChampionBadge({
   );
 }
 
+// Rank-change indicator since the most recent result: green up, red down, gray
+// dash. Shape (and the title) carry the meaning so it does not rely on colour.
+function MoveArrow({ direction }: { direction: "up" | "down" | "same" }) {
+  if (direction === "up") {
+    return (
+      <span className="text-emerald-500" title="Moved up" aria-label="moved up">
+        &#9650;
+      </span>
+    );
+  }
+  if (direction === "down") {
+    return (
+      <span className="text-red-500" title="Moved down" aria-label="moved down">
+        &#9660;
+      </span>
+    );
+  }
+  return (
+    <span className="text-text-muted" title="No change" aria-label="no change">
+      -
+    </span>
+  );
+}
+
+// Points earned from the most recent result: a small green "+N" badge, or a gray
+// "0" when none were earned.
+function PointsBadge({ points }: { points: number }) {
+  if (points > 0) {
+    return (
+      <span className="ml-1 rounded bg-emerald-500/15 px-1 text-[10px] font-semibold text-emerald-400">
+        +{points}
+      </span>
+    );
+  }
+  return <span className="ml-1 text-[10px] text-text-muted">{points}</span>;
+}
+
 // One centered status line (e.g. "Groups  Not started"), a bit larger.
 function StatusRow({ label, status }: { label: string; status: string }) {
   return (
@@ -110,14 +150,23 @@ export default async function Home() {
   const user = await getCurrentUser();
   if (!user) return null; // layout guarantees a user; satisfy types
 
-  const [players, leaderboard, matchData, settings, champions] =
-    await Promise.all([
-      getPlayers(),
-      getLeaderboard(),
-      getAllMatchesForViewer(user.id),
-      prisma.settings.findUnique({ where: { id: 1 } }),
-      getPredictedChampions(),
-    ]);
+  const [
+    players,
+    { rows: leaderboard, movement },
+    matchData,
+    settings,
+    champions,
+    perfectScores,
+    championPicks,
+  ] = await Promise.all([
+    getPlayers(),
+    getLeaderboardWithMovement(),
+    getAllMatchesForViewer(user.id),
+    prisma.settings.findUnique({ where: { id: 1 } }),
+    getPredictedChampions(),
+    getLastMatchPerfectScores(),
+    getChampionPicks(),
+  ]);
 
   // Availability of each prediction section (color the nav buttons green/red).
   // "Available" means the section is open to use, regardless of your own
@@ -191,6 +240,45 @@ export default async function Home() {
         <NextMatches matches={matchData.matches} nextIndex={matchData.nextIndex} />
       </section>
 
+      {/* Champion-pick ticker: cycles through every submitted player's predicted
+          winner. Hidden entirely when nobody has submitted a bracket. */}
+      {championPicks.length > 0 ? (
+        <section className="mb-6">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
+            Champion picks
+          </h2>
+          <ChampionCarousel picks={championPicks} />
+        </section>
+      ) : null}
+
+      {/* Perfect score shoutout for the most recent completed group match.
+          Hidden entirely when nobody nailed the exact scoreline. */}
+      {perfectScores ? (
+        <section className="mb-6">
+          <div className="rounded-2xl border border-gold/40 bg-gold/10 p-4">
+            <div className="flex items-center gap-2">
+              <span aria-hidden className="text-lg">
+                &#11088;
+              </span>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gold">
+                Perfect score
+              </h2>
+            </div>
+            <p className="mt-2 text-sm font-medium text-text">
+              {flagEmoji(perfectScores.homeIso)} {perfectScores.homeName}{" "}
+              {perfectScores.homeGoals}-{perfectScores.awayGoals}{" "}
+              {perfectScores.awayName} {flagEmoji(perfectScores.awayIso)}
+            </p>
+            <p className="mt-1 text-sm text-text-muted">
+              Nailed the exact score:{" "}
+              <span className="font-semibold text-text">
+                {perfectScores.players.join(", ")}
+              </span>
+            </p>
+          </div>
+        </section>
+      ) : null}
+
       {/* Leaderboard */}
       <section className="mb-6">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
@@ -213,6 +301,7 @@ export default async function Home() {
                 // Gild the leader only once results give them a real lead.
                 const isLeader = row.rank === 1 && row.totalPoints > 0;
                 const champion = champions.get(row.userId);
+                const move = movement.get(row.userId);
                 return (
                   <tr
                     key={row.userId}
@@ -229,7 +318,10 @@ export default async function Home() {
                           : "text-text-muted")
                       }
                     >
-                      {row.rank}
+                      <span className="inline-flex items-center gap-1">
+                        {row.rank}
+                        {move ? <MoveArrow direction={move.direction} /> : null}
+                      </span>
                     </td>
                     <td className="whitespace-nowrap px-2 py-2.5 sm:px-3">
                       <span className={isLeader ? "font-semibold text-gold" : ""}>
@@ -251,11 +343,12 @@ export default async function Home() {
                     <td className="px-2 py-2.5 sm:px-3 text-center">{row.awardPoints}</td>
                     <td
                       className={
-                        "px-2 py-2.5 sm:px-3 text-center font-semibold " +
+                        "whitespace-nowrap px-2 py-2.5 sm:px-3 text-center font-semibold " +
                         (isLeader ? "text-gold" : "")
                       }
                     >
                       {row.totalPoints}
+                      {move ? <PointsBadge points={move.points} /> : null}
                     </td>
                   </tr>
                 );
