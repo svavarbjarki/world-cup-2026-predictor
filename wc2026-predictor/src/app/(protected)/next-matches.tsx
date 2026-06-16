@@ -5,13 +5,85 @@ import type { CSSProperties } from "react";
 import { flagEmoji } from "@/lib/data/teams";
 import { rawTeamColor } from "@/lib/team-colors";
 import type { NextMatchView } from "@/lib/hub";
+import type { GoalEventView } from "@/lib/goal-events";
 import { MatchAggregateBar } from "./match-aggregate-bar";
+import { PlayerAvatar } from "./player-avatar";
 
 function Flag({ isoCode }: { isoCode: string }) {
   return (
     <span aria-hidden className="mr-1">
       {flagEmoji(isoCode)}
     </span>
+  );
+}
+
+// "[Scorer] [min]' (assist: [Assister])" with the minute and assist clause
+// dropped when absent. A null scorer is an own goal or an unlisted player.
+function goalLine(g: GoalEventView): string {
+  const scorer = g.scorerName ?? "Own goal";
+  const minute = g.minute != null ? ` ${g.minute}'` : "";
+  const assist = g.assisterName ? ` (assist: ${g.assisterName})` : "";
+  return `${scorer}${minute}${assist}`;
+}
+
+/**
+ * Goal list grouped home-left / away-right, with the running scoreline after each
+ * goal so it is clear which goal a scorer scored (1-0, 2-0, 2-1, ...). The score
+ * is tallied in chronological order (goals arrive sorted by minute).
+ */
+function MatchGoals({
+  goals,
+  homeIso,
+  awayIso,
+}: {
+  goals: GoalEventView[];
+  homeIso: string;
+  awayIso: string;
+}) {
+  let home = 0;
+  let away = 0;
+  const rows = goals.map((g) => {
+    if (g.side === "home") home += 1;
+    else away += 1;
+    return { g, score: `${home}-${away}` };
+  });
+  const scoreClass = "font-semibold tabular-nums text-black/45 dark:text-white/45";
+
+  return (
+    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-black/60 dark:text-white/60">
+      <ul className="space-y-1 text-left">
+        {rows
+          .filter((r) => r.g.side === "home")
+          .map((r, i) => (
+            <li key={`h${i}`} className="flex items-center gap-1">
+              <span className={scoreClass}>{r.score}</span>
+              <PlayerAvatar
+                photo={r.g.scorerPhoto}
+                isoCode={homeIso}
+                alt={r.g.scorerName ?? ""}
+                size={16}
+              />
+              <span className="min-w-0 truncate">{goalLine(r.g)}</span>
+            </li>
+          ))}
+      </ul>
+      <ul className="space-y-1 text-right">
+        {rows
+          .filter((r) => r.g.side === "away")
+          .map((r, i) => (
+            <li key={`a${i}`} className="flex items-center justify-end gap-1">
+              <span className="min-w-0 truncate">{goalLine(r.g)}</span>
+              <PlayerAvatar
+                photo={r.g.scorerPhoto}
+                isoCode={awayIso}
+                alt={r.g.scorerName ?? ""}
+                size={16}
+              />
+              <span className={scoreClass}>{r.score}</span>
+            </li>
+          ))}
+      </ul>
+    </div>
   );
 }
 
@@ -118,6 +190,14 @@ export function NextMatches({
                   ? `Final: ${m.result}`
                   : `Winner: ${m.result}`}
               </div>
+            ) : null}
+
+            {m.played && m.goals.length > 0 ? (
+              <MatchGoals
+                goals={m.goals}
+                homeIso={m.home.isoCode}
+                awayIso={m.away.isoCode}
+              />
             ) : null}
 
             <div className="mt-4 border-t border-black/5 pt-3 dark:border-white/10">

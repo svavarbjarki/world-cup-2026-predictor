@@ -85,6 +85,17 @@ model Player {
   teamId String
   team   Team   @relation("TeamPlayers", fields: [teamId], references: [id])
 
+  /// Jersey number from the full-squad source. Null for the award-contender seed.
+  number Int?
+  /// Player photo URL from the squad source. Optional.
+  photo  String?
+  /// API-Football player id, so full-squad data can be upserted idempotently
+  /// across the multi-day fetch. Null for the original award-contender seed rows.
+  apiFootballId Int? @unique
+
+  goalsScored GoalEvent[] @relation("GoalScorer")
+  assists     GoalEvent[] @relation("GoalAssister")
+
   @@unique([name, teamId])
   @@index([teamId])
 }
@@ -295,6 +306,8 @@ model GroupResult {
   awayGoals Int
 
   enteredAt DateTime @default(now())
+
+  goalEvents GoalEvent[]
 }
 
 /// The actual real-world outcome of a knockout match.
@@ -319,6 +332,47 @@ model KnockoutResult {
   actualWinner       Team   @relation("ActualWinner", fields: [actualWinnerTeamId], references: [id])
 
   enteredAt DateTime @default(now())
+
+  /// Optional real scoreline, recorded so knockout goal events can be entered
+  /// (it drives the number of goal rows). Scoring still uses the winner only, so
+  /// this does not affect any prediction or scoring logic.
+  homeGoals Int?
+  awayGoals Int?
+
+  goalEvents GoalEvent[]
+}
+
+/// One goal in a real match, entered by the organizer alongside the scoreline.
+/// Links to exactly one result row: a GroupResult or a KnockoutResult (the
+/// "exactly one" rule is enforced in the server action, not the database). The
+/// scorer is nullable so own goals or unlisted players can be recorded; the
+/// assister is nullable for unassisted goals; the minute is optional.
+model GoalEvent {
+  id String @id @default(cuid())
+
+  groupResultId    String?
+  groupResult      GroupResult?    @relation(fields: [groupResultId], references: [id], onDelete: Cascade)
+  knockoutResultId String?
+  knockoutResult   KnockoutResult? @relation(fields: [knockoutResultId], references: [id], onDelete: Cascade)
+
+  /// Which side of the match the goal counts for: "home" or "away". Stored so
+  /// goals can be grouped by team for display even for own goals, where the
+  /// scorer may be null or a player from the opposing team.
+  side String
+
+  scorerId   String?
+  scorer     Player? @relation("GoalScorer", fields: [scorerId], references: [id], onDelete: SetNull)
+  assisterId String?
+  assister   Player? @relation("GoalAssister", fields: [assisterId], references: [id], onDelete: SetNull)
+
+  /// Match minute (1 to 120+). Optional.
+  minute    Int?
+  createdAt DateTime @default(now())
+
+  @@index([groupResultId])
+  @@index([knockoutResultId])
+  @@index([scorerId])
+  @@index([assisterId])
 }
 
 // ---------------------------------------------------------------------------

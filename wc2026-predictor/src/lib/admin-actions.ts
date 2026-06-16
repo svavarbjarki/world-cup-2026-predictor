@@ -21,6 +21,7 @@ import {
 } from "@/lib/predictions";
 import { resolvePartialBracket } from "@/lib/engine/advanceBracket";
 import { isValidGoal } from "@/lib/predictions-gating";
+import { validateGoalEvents, type GoalEventInput } from "@/lib/goal-events";
 import {
   AWARD_FIELD,
   isPlayerCategory,
@@ -162,16 +163,33 @@ export async function openKnockoutPhaseAction(): Promise<AdminSaveResult> {
 // Results entry (rolling, as matches finish)
 // ---------------------------------------------------------------------------
 
+/** Confirm every non-null scorer/assister id refers to a real player. */
+async function goalPlayersExist(goals: GoalEventInput[]): Promise<boolean> {
+  const ids = [
+    ...new Set(
+      goals
+        .flatMap((g) => [g.scorerId, g.assisterId])
+        .filter((x): x is string => x != null),
+    ),
+  ];
+  if (ids.length === 0) return true;
+  const n = await prisma.player.count({ where: { id: { in: ids } } });
+  return n === ids.length;
+}
+
 /**
- * Enter or edit the real final score of a group fixture. Admin only. Validates
- * non-negative integer goals and that the fixture exists. Upserts the GroupResult
- * so corrections are allowed. Scoring is computed on the fly from results by the
- * leaderboard, so saving here is all that is needed for points to update.
+ * Enter or edit the real final score of a group fixture, plus its goal events.
+ * Admin only. Validates non-negative integer goals, that the fixture exists, and
+ * that the goal rows match the score. The GroupResult is upserted and its goal
+ * events are replaced in a single transaction, so corrections roll back cleanly.
+ * The existing scoreline upsert is extended, not replaced; scoring still derives
+ * on the fly from the scoreline and is unaffected by goal events.
  */
 export async function saveGroupResultAction(
   fixtureId: string,
   homeGoals: number,
   awayGoals: number,
+  goals: GoalEventInput[] = [],
 ): Promise<AdminSaveResult> {
   if (!(await isAdminAuthed())) {
     return { ok: false, error: "Not authorized." };
@@ -185,10 +203,30 @@ export async function saveGroupResultAction(
   });
   if (!fixture) return { ok: false, error: "That fixture does not exist." };
 
-  await prisma.groupResult.upsert({
-    where: { groupFixtureId: fixtureId },
-    update: { homeGoals, awayGoals },
-    create: { groupFixtureId: fixtureId, homeGoals, awayGoals },
+  const goalsError = validateGoalEvents(goals, homeGoals, awayGoals);
+  if (goalsError) return { ok: false, error: goalsError };
+  if (!(await goalPlayersExist(goals))) {
+    return { ok: false, error: "Unknown player selected." };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const result = await tx.groupResult.upsert({
+      where: { groupFixtureId: fixtureId },
+      update: { homeGoals, awayGoals },
+      create: { groupFixtureId: fixtureId, homeGoals, awayGoals },
+    });
+    await tx.goalEvent.deleteMany({ where: { groupResultId: result.id } });
+    if (goals.length > 0) {
+      await tx.goalEvent.createMany({
+        data: goals.map((g) => ({
+          groupResultId: result.id,
+          side: g.side,
+          scorerId: g.scorerId,
+          assisterId: g.assisterId,
+          minute: g.minute,
+        })),
+      });
+    }
   });
 
   return { ok: true };
@@ -206,6 +244,8 @@ export async function saveGroupResultAction(
 export async function saveKnockoutResultAction(
   matchNumber: number,
   winnerTeamId: string,
+  score: { homeGoals: number; awayGoals: number } | null = null,
+  goals: GoalEventInput[] = [],
 ): Promise<KnockoutSaveResult> {
   if (!(await isAdminAuthed())) {
     return { ok: false, error: "Not authorized." };
@@ -230,29 +270,62 @@ export async function saveKnockoutResultAction(
     return { ok: false, error: "That team is not in this match." };
   }
 
+  // The optional scoreline drives goal entry (knockout winners can differ from
+  // the score via penalties, so the winner is not constrained by it).
+  if (score) {
+    if (!isValidGoal(score.homeGoals) || !isValidGoal(score.awayGoals)) {
+      return { ok: false, error: "Enter whole numbers from 0 to 99 for each score." };
+    }
+    const goalsError = validateGoalEvents(goals, score.homeGoals, score.awayGoals);
+    if (goalsError) return { ok: false, error: goalsError };
+    if (!(await goalPlayersExist(goals))) {
+      return { ok: false, error: "Unknown player selected." };
+    }
+  } else if (goals.length > 0) {
+    return { ok: false, error: "Enter the score before adding goals." };
+  }
+
   // Recompute the real bracket with the new winner to learn which results survive.
   const newWinners = new Map(core.resolved.effectivePicks);
   newWinners.set(matchNumber, winnerTeamId);
   const newResolved = resolvePartialBracket(core.roundOf32, newWinners);
   const surviving = [...newResolved.effectivePicks.keys()];
 
-  await prisma.$transaction([
-    prisma.knockoutResult.upsert({
+  await prisma.$transaction(async (tx) => {
+    const result = await tx.knockoutResult.upsert({
       where: { matchNumber },
       update: {
         actualWinnerTeamId: winnerTeamId,
         round: schemaRoundForMatch(matchNumber),
+        homeGoals: score ? score.homeGoals : null,
+        awayGoals: score ? score.awayGoals : null,
       },
       create: {
         matchNumber,
         actualWinnerTeamId: winnerTeamId,
         round: schemaRoundForMatch(matchNumber),
+        homeGoals: score ? score.homeGoals : null,
+        awayGoals: score ? score.awayGoals : null,
       },
-    }),
-    prisma.knockoutResult.deleteMany({
+    });
+    await tx.goalEvent.deleteMany({ where: { knockoutResultId: result.id } });
+    if (score && goals.length > 0) {
+      await tx.goalEvent.createMany({
+        data: goals.map((g) => ({
+          knockoutResultId: result.id,
+          side: g.side,
+          scorerId: g.scorerId,
+          assisterId: g.assisterId,
+          minute: g.minute,
+        })),
+      });
+    }
+    // Drop any later real results (and their goal events, via cascade) that a
+    // changed winner has invalidated.
+    await tx.knockoutResult.deleteMany({
       where: { matchNumber: { notIn: surviving } },
-    }),
-  ]);
+    });
+  });
 
   const state = await getKnockoutResultsState();
   if (!state) return { ok: false, error: "Could not load the bracket." };

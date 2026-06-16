@@ -19,6 +19,7 @@ import {
 } from "@/lib/aggregates";
 import { matchOutcome } from "@/lib/engine/outcome";
 import { rawTeamColor } from "@/lib/team-colors";
+import type { GoalEventView } from "@/lib/goal-events";
 import type { ResolvedBracket } from "@/lib/engine/advanceBracket";
 import type {
   GroupStageState,
@@ -81,6 +82,9 @@ export interface NextMatchView {
   picks: NextMatchPick[] | null;
   /** How submitted players called the outcome, gated by the same phase rule. */
   aggregate: MatchAggregate;
+  /** Real goal events for a played match, ordered by minute. These reflect the
+   *  actual result, so they are shown to everyone regardless of submission. */
+  goals: GoalEventView[];
 }
 
 interface NextMatchBase {
@@ -302,6 +306,67 @@ export async function getAllMatchesForViewer(
   const sortByName = (picks: NextMatchPick[]) =>
     [...picks].sort((a, b) => a.displayName.localeCompare(b.displayName));
 
+  // Real goal events for the played matches. Not gated by submission status:
+  // they reflect the actual result, like the scoreline itself.
+  const [groupGoalRows, koGoalRows] = await Promise.all([
+    fixtureIds.length > 0
+      ? prisma.goalEvent.findMany({
+          where: { groupResult: { groupFixtureId: { in: fixtureIds } } },
+          include: {
+            scorer: { select: { name: true, photo: true } },
+            assister: { select: { name: true } },
+            groupResult: { select: { groupFixtureId: true } },
+          },
+        })
+      : Promise.resolve([]),
+    matchNumbers.length > 0
+      ? prisma.goalEvent.findMany({
+          where: { knockoutResult: { matchNumber: { in: matchNumbers } } },
+          include: {
+            scorer: { select: { name: true, photo: true } },
+            assister: { select: { name: true } },
+            knockoutResult: { select: { matchNumber: true } },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const toGoalView = (g: {
+    side: string;
+    scorerId: string | null;
+    scorer: { name: string; photo: string | null } | null;
+    assisterId: string | null;
+    assister: { name: string } | null;
+    minute: number | null;
+  }): GoalEventView => ({
+    side: g.side === "away" ? "away" : "home",
+    scorerId: g.scorerId,
+    scorerName: g.scorer?.name ?? null,
+    scorerPhoto: g.scorer?.photo ?? null,
+    assisterId: g.assisterId,
+    assisterName: g.assister?.name ?? null,
+    minute: g.minute,
+  });
+  const byMinute = (a: GoalEventView, b: GoalEventView) =>
+    (a.minute ?? 999) - (b.minute ?? 999);
+
+  const goalsByFixture = new Map<string, GoalEventView[]>();
+  for (const g of groupGoalRows) {
+    const fid = g.groupResult?.groupFixtureId;
+    if (!fid) continue;
+    const list = goalsByFixture.get(fid) ?? [];
+    list.push(toGoalView(g));
+    goalsByFixture.set(fid, list);
+  }
+  const goalsByMatch = new Map<number, GoalEventView[]>();
+  for (const g of koGoalRows) {
+    const mn = g.knockoutResult?.matchNumber;
+    if (mn == null) continue;
+    const list = goalsByMatch.get(mn) ?? [];
+    list.push(toGoalView(g));
+    goalsByMatch.set(mn, list);
+  }
+
   const matches: NextMatchView[] = all.map((m) => {
     if (m.phase === "group") {
       return {
@@ -314,6 +379,7 @@ export async function getAllMatchesForViewer(
           groupVisible,
           scorelinesByFixture.get(m.fixtureId ?? "") ?? [],
         ),
+        goals: [...(goalsByFixture.get(m.fixtureId ?? "") ?? [])].sort(byMinute),
       };
     }
     return {
@@ -325,6 +391,7 @@ export async function getAllMatchesForViewer(
         winnerIdsByMatch.get(m.matchNumber ?? -1) ?? [],
         m.homeTeamId,
       ),
+      goals: [...(goalsByMatch.get(m.matchNumber ?? -1) ?? [])].sort(byMinute),
     };
   });
 
@@ -503,6 +570,85 @@ export async function getLastMatchPerfectScores(): Promise<PerfectScoreShoutout 
       .map((p) => p.user.displayName)
       .sort((a, b) => a.localeCompare(b)),
   };
+}
+
+export interface StatRow {
+  playerId: string;
+  name: string;
+  /** Team isoCode (also Team.id), for the flag. */
+  isoCode: string;
+  /** Squad photo URL, or null (award-only rows have none). */
+  photo: string | null;
+  count: number;
+}
+
+/**
+ * Resolve grouped {playerId, count} tallies into the top 5 rows: fetch the player
+ * names in one batched query (not per player), sort by count descending then name
+ * ascending for a stable, alphabetical tie-break, and take the top 5.
+ */
+async function topStatRows(
+  counts: { id: string; count: number }[],
+): Promise<StatRow[]> {
+  if (counts.length === 0) return [];
+  const players = await prisma.player.findMany({
+    where: { id: { in: counts.map((c) => c.id) } },
+    select: { id: true, name: true, teamId: true, photo: true },
+  });
+  const byId = new Map(players.map((p) => [p.id, p]));
+  const rows = counts.flatMap((c) => {
+    const p = byId.get(c.id);
+    return p
+      ? [
+          {
+            playerId: c.id,
+            name: p.name,
+            isoCode: p.teamId,
+            photo: p.photo,
+            count: c.count,
+          },
+        ]
+      : [];
+  });
+  rows.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  return rows.slice(0, 5);
+}
+
+/**
+ * Top 5 goal scorers and top 5 assisters from the real goal events. One grouped
+ * query per stat (plus one batched name lookup), so no N+1. Reflects real results,
+ * so it is shown to everyone regardless of submission status.
+ */
+export async function getTopScorersAndAssisters(): Promise<{
+  scorers: StatRow[];
+  assisters: StatRow[];
+}> {
+  const [scorerGroups, assisterGroups] = await Promise.all([
+    prisma.goalEvent.groupBy({
+      by: ["scorerId"],
+      where: { scorerId: { not: null } },
+      _count: { scorerId: true },
+    }),
+    prisma.goalEvent.groupBy({
+      by: ["assisterId"],
+      where: { assisterId: { not: null } },
+      _count: { assisterId: true },
+    }),
+  ]);
+
+  const [scorers, assisters] = await Promise.all([
+    topStatRows(
+      scorerGroups.map((g) => ({ id: g.scorerId as string, count: g._count.scorerId })),
+    ),
+    topStatRows(
+      assisterGroups.map((g) => ({
+        id: g.assisterId as string,
+        count: g._count.assisterId,
+      })),
+    ),
+  ]);
+
+  return { scorers, assisters };
 }
 
 export interface OtherPlayerView {

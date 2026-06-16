@@ -95,12 +95,19 @@ export async function getAwardResultPicks(): Promise<AwardPicksIds> {
   };
 }
 
+export interface ResolvedAwardPick {
+  label: string;
+  isoCode: string;
+  /** Player photo URL for player awards; absent for the team winner. */
+  photo?: string | null;
+}
+
 export interface ResolvedAwardPicks {
-  winner: { label: string; isoCode: string } | null;
-  goldenBall: { label: string; isoCode: string } | null;
-  goldenBoot: { label: string; isoCode: string } | null;
-  goldenGlove: { label: string; isoCode: string } | null;
-  youngPlayer: { label: string; isoCode: string } | null;
+  winner: ResolvedAwardPick | null;
+  goldenBall: ResolvedAwardPick | null;
+  goldenBoot: ResolvedAwardPick | null;
+  goldenGlove: ResolvedAwardPick | null;
+  youngPlayer: ResolvedAwardPick | null;
 }
 
 /** Turn a set of pick ids into display labels (team / player names + flags). */
@@ -111,6 +118,21 @@ export async function resolveAwardPicks(
   const teamById = new Map(teams.map((t) => [t.id, t]));
   const playerById = new Map(players.map((p) => [p.id, p]));
 
+  // Photos for the picked players (one batched query; team winner has no photo).
+  const playerIds = [
+    picks.goldenBallPlayerId,
+    picks.goldenBootPlayerId,
+    picks.goldenGlovePlayerId,
+    picks.youngPlayerId,
+  ].filter((x): x is string => x != null);
+  const photoRows = playerIds.length
+    ? await prisma.player.findMany({
+        where: { id: { in: playerIds } },
+        select: { id: true, photo: true },
+      })
+    : [];
+  const photoById = new Map(photoRows.map((r) => [r.id, r.photo]));
+
   const team = (id: string | null) => {
     if (!id) return null;
     const t = teamById.get(id);
@@ -119,7 +141,13 @@ export async function resolveAwardPicks(
   const player = (id: string | null) => {
     if (!id) return null;
     const p = playerById.get(id);
-    return p ? { label: `${p.name} (${p.teamName})`, isoCode: p.isoCode } : null;
+    return p
+      ? {
+          label: `${p.name} (${p.teamName})`,
+          isoCode: p.isoCode,
+          photo: photoById.get(id) ?? null,
+        }
+      : null;
   };
 
   return {

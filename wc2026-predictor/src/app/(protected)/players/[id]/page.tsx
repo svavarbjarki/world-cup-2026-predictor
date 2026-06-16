@@ -2,7 +2,8 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { getPlayerPredictionsForViewer } from "@/lib/hub";
 import { BracketTree } from "../../knockout/bracket-tree";
-import type { ResolvedAwardPicks } from "@/lib/awards-server";
+import { PlayerAvatar } from "../../player-avatar";
+import type { ResolvedAwardPicks, ResolvedAwardPick } from "@/lib/awards-server";
 import type {
   GroupStageState,
   KnockoutBracketState,
@@ -98,7 +99,7 @@ export default async function PlayerPage({
 }
 
 function AwardsReadOnly({ picks }: { picks: ResolvedAwardPicks }) {
-  const rows: { label: string; value: { label: string; isoCode: string } | null }[] = [
+  const rows: { label: string; value: ResolvedAwardPick | null }[] = [
     { label: "The Winner", value: picks.winner },
     { label: "Golden Ball", value: picks.goldenBall },
     { label: "Golden Boot", value: picks.goldenBoot },
@@ -117,8 +118,22 @@ function AwardsReadOnly({ picks }: { picks: ResolvedAwardPicks }) {
               <td className="py-1.5 text-black/50 dark:text-white/50">
                 {r.label}
               </td>
-              <td className="py-1.5 text-right font-medium">
-                {r.value ? r.value.label : "-"}
+              <td className="py-1.5">
+                {r.value ? (
+                  <span className="flex items-center justify-end gap-1.5 font-medium">
+                    {/* The Winner is a team (no photo); the avatar falls back to
+                        the flag. Player awards show the player photo. */}
+                    <PlayerAvatar
+                      photo={r.value.photo ?? null}
+                      isoCode={r.value.isoCode}
+                      alt={r.value.label}
+                      size={20}
+                    />
+                    <span className="truncate">{r.value.label}</span>
+                  </span>
+                ) : (
+                  <span className="block text-right">-</span>
+                )}
               </td>
             </tr>
           ))}

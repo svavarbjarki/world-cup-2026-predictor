@@ -7,12 +7,15 @@ import {
   getPredictedChampions,
   getLastMatchPerfectScores,
   getChampionPicks,
+  getTopScorersAndAssisters,
+  type StatRow,
 } from "@/lib/hub";
 import { getLeaderboardWithMovement } from "@/lib/leaderboard";
 import { flagEmoji } from "@/lib/data/teams";
 import { prisma } from "@/lib/prisma";
 import { NextMatches } from "./next-matches";
 import { ChampionCarousel } from "./champion-carousel";
+import { PlayerAvatar } from "./player-avatar";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +109,47 @@ function PointsBadge({ points }: { points: number }) {
   return <span className="ml-1 text-[10px] text-text-muted">{points}</span>;
 }
 
+// A compact top-5 list (scorers or assisters). Shows however many exist, with no
+// placeholder rows, and a muted note when empty.
+function StatList({
+  title,
+  rows,
+  emptyLabel,
+}: {
+  title: string;
+  rows: StatRow[];
+  emptyLabel: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-black/10 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-neutral-900">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gold">
+        {title}
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-xs text-black/45 dark:text-white/45">{emptyLabel}</p>
+      ) : (
+        <ol className="space-y-1 text-sm">
+          {rows.map((r, i) => (
+            <li
+              key={r.playerId}
+              className="flex items-center justify-between gap-2"
+            >
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="w-4 shrink-0 text-right text-xs text-black/40 dark:text-white/40">
+                  {i + 1}
+                </span>
+                <PlayerAvatar photo={r.photo} isoCode={r.isoCode} alt={r.name} size={22} />
+                <span className="truncate">{r.name}</span>
+              </span>
+              <span className="shrink-0 font-semibold tabular-nums">{r.count}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 // One centered status line (e.g. "Groups  Not started"), a bit larger.
 function StatusRow({ label, status }: { label: string; status: string }) {
   return (
@@ -158,6 +202,7 @@ export default async function Home() {
     champions,
     perfectScores,
     championPicks,
+    topStats,
   ] = await Promise.all([
     getPlayers(),
     getLeaderboardWithMovement(),
@@ -166,6 +211,7 @@ export default async function Home() {
     getPredictedChampions(),
     getLastMatchPerfectScores(),
     getChampionPicks(),
+    getTopScorersAndAssisters(),
   ]);
 
   // Availability of each prediction section (color the nav buttons green/red).
@@ -361,6 +407,28 @@ export default async function Home() {
           0.
         </p>
       </section>
+
+      {/* Tournament stats: real top scorers and assisters. Shown to everyone;
+          hidden entirely until at least one goal has been recorded. */}
+      {topStats.scorers.length > 0 || topStats.assisters.length > 0 ? (
+        <section className="mb-6">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
+            Tournament stats
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
+            <StatList
+              title="Top scorers"
+              rows={topStats.scorers}
+              emptyLabel="No goals yet"
+            />
+            <StatList
+              title="Top assisters"
+              rows={topStats.assisters}
+              emptyLabel="No assists yet"
+            />
+          </div>
+        </section>
+      ) : null}
 
       {/* Players */}
       <section>
