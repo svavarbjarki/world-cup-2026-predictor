@@ -271,6 +271,14 @@ export default async function Home() {
           available={awardsAvailable}
           submitted={user.awardsStatus === "SUBMITTED"}
         />
+        {/* Always-available view (not a prediction step), so it gets the gold
+            accent rather than the green/red availability tone. */}
+        <Link
+          href="/stats"
+          className="w-full max-w-xs rounded-lg bg-gold px-4 py-3 text-center font-medium text-bg hover:bg-gold-bright"
+        >
+          View stats
+        </Link>
       </div>
 
       {/* Matches (swipe through; opens on the next match, scroll back for played) */}
