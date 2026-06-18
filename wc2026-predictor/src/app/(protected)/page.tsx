@@ -11,9 +11,13 @@ import {
   type StatRow,
 } from "@/lib/hub";
 import { getLeaderboardWithMovement } from "@/lib/leaderboard";
+import { getBonusBox } from "@/lib/bonus-hub";
+import { getBonusLeaderboard } from "@/lib/bonus-leaderboard";
 import { flagEmoji } from "@/lib/data/teams";
 import { prisma } from "@/lib/prisma";
 import { NextMatches } from "./next-matches";
+import { BonusBox } from "./bonus-box";
+import { BonusLeaderboard } from "./bonus-leaderboard";
 import { ChampionCarousel } from "./champion-carousel";
 import { PlayerAvatar } from "./player-avatar";
 
@@ -203,6 +207,8 @@ export default async function Home() {
     perfectScores,
     championPicks,
     topStats,
+    bonusBox,
+    bonusStandings,
   ] = await Promise.all([
     getPlayers(),
     getLeaderboardWithMovement(),
@@ -212,6 +218,8 @@ export default async function Home() {
     getLastMatchPerfectScores(),
     getChampionPicks(),
     getTopScorersAndAssisters(),
+    getBonusBox(user.id),
+    getBonusLeaderboard(),
   ]);
 
   // Availability of each prediction section (color the nav buttons green/red).
@@ -280,6 +288,11 @@ export default async function Home() {
           View stats
         </Link>
       </div>
+
+      {/* Bonus mini-prediction for the next match, above the matches section. */}
+      <section className="mb-6">
+        <BonusBox view={bonusBox} />
+      </section>
 
       {/* Matches (swipe through; opens on the next match, scroll back for played) */}
       <section className="mb-6">
@@ -414,6 +427,11 @@ export default async function Home() {
           Points appear once real results are entered. Until then everyone is on
           0.
         </p>
+      </section>
+
+      {/* Bonus side-game standings, beside the main leaderboard. */}
+      <section className="mb-6">
+        <BonusLeaderboard rows={bonusStandings} />
       </section>
 
       {/* Tournament stats: real top scorers and assisters. Shown to everyone;

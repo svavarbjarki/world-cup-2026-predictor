@@ -87,7 +87,7 @@ export interface NextMatchView {
   goals: GoalEventView[];
 }
 
-interface NextMatchBase {
+export interface NextMatchBase {
   phase: "group" | "knockout";
   label: string;
   kickoffAt: Date | null;
@@ -107,7 +107,7 @@ interface NextMatchBase {
  * times are absent (not seeded yet) it falls back to fixture order (group by
  * match number, then knockout) and the caller shows "schedule TBD".
  */
-async function allMatchesSorted(): Promise<NextMatchBase[]> {
+export async function allMatchesSorted(): Promise<NextMatchBase[]> {
   const [groupFixtures, groupResults, koFixtures, koResults] =
     await Promise.all([
       prisma.groupFixture.findMany({
@@ -148,6 +148,7 @@ async function allMatchesSorted(): Promise<NextMatchBase[]> {
       homeTeamId: f.homeTeamId,
       awayTeamId: f.awayTeamId,
       fixtureId: f.id,
+      matchNumber: f.matchNumber,
       order: f.matchNumber,
       played: res != null,
       result: res ? `${res.homeGoals}-${res.awayGoals}` : null,

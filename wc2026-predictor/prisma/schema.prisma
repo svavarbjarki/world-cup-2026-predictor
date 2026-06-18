@@ -206,6 +206,7 @@ model User {
   groupPredictions    GroupPrediction[]
   knockoutPredictions KnockoutPrediction[]
   awardPrediction     AwardPrediction?
+  bonusPicks          BonusPredictionPick[]
 }
 
 // ---------------------------------------------------------------------------
@@ -376,6 +377,66 @@ model GoalEvent {
 }
 
 // ---------------------------------------------------------------------------
+// Bonus side-game (lightweight, separate from the main prediction game)
+// ---------------------------------------------------------------------------
+//
+// A single randomly-chosen mini-prediction per real match, open to everyone and
+// independent of the main leaderboard and the bracket-submission visibility rule.
+// Generated lazily (no cron) when the front page first needs a match's bonus box.
+// Grading is fully derived from the existing GroupResult/KnockoutResult score and
+// GoalEvent rows, so there is no stored correctness or points and no admin screen.
+
+/// One bonus mini-prediction attached to a real match. Keyed by the official
+/// match number (group 1-72, knockout 73-104), which is globally unique across
+/// the tournament, so there is exactly one bonus prediction per match.
+model BonusPrediction {
+  id String @id @default(cuid())
+
+  /// Official match number this bonus is attached to. One bonus per match.
+  matchNumber Int @unique
+
+  /// The randomly assigned type:
+  /// "BTTS" | "OVER_UNDER" | "FIRST_TEAM" | "FIRST_SCORER".
+  /// (App code owns this vocabulary; SQLite has no enums.)
+  type String
+
+  /// The over/under line, set ONLY when type is "OVER_UNDER" (null otherwise).
+  /// Captured from Settings.bonusOverUnderLine at generation time so the line is
+  /// explicit on the row rather than implicit in display logic.
+  line Float?
+
+  createdAt DateTime @default(now())
+
+  picks BonusPredictionPick[]
+}
+
+/// One user's single pick for a bonus prediction. The choice is polymorphic and
+/// stored as a string whose meaning depends on the bonus type: "yes"/"no" for
+/// both-teams-to-score, "over"/"under" for the goals line, a team id for
+/// team-scores-first, or a player id for first-goalscorer. The value is validated
+/// against the type in the server action, not by the database. No correctness or
+/// points columns: those are computed live from the real result and goal events.
+model BonusPredictionPick {
+  id String @id @default(cuid())
+
+  bonusPredictionId String
+  bonusPrediction   BonusPrediction @relation(fields: [bonusPredictionId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Polymorphic choice value (see model doc). Meaning depends on the bonus type.
+  choice String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, bonusPredictionId])
+  @@index([bonusPredictionId])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
 // Config / settings
 // ---------------------------------------------------------------------------
 
@@ -400,6 +461,15 @@ model Settings {
 
   /// Flat points for each correct award prediction (5 categories, default 5 each).
   awardPoints Int @default(5)
+
+  /// BONUS side-game config (separate from the main scoring above). The over/under
+  /// line for the "total goals" bonus type, read once when a bonus prediction is
+  /// generated and copied onto the row so display/grading never re-read a changed
+  /// value. Stored as a Float so non-integer lines like 2.5 are exact.
+  bonusOverUnderLine Float @default(2.5)
+  /// Flat points per correct bonus pick, the same value across all four bonus
+  /// types. Summed live into the separate bonus leaderboard.
+  bonusPointsPerCorrect Int @default(1)
 
   /// GROUP-stage global deadline. After this, group predictions lock for everyone.
   /// Null means no group deadline set yet.
