@@ -32,5 +32,13 @@
     "tsx": "^4.22.4",
     "typescript": "^5",
     "vitest": "^4.1.8"
+  },
+  "comments": {
+    "overrides": "Pin the @emnapi/* wasm helpers (optional, transitive via vitest 4's @rolldown wasm binding) to a single version tree-wide. Their nested versions otherwise resolve differently across npm versions and platforms, which left package-lock.json out of sync with what `npm ci` computed in the linux Docker build and broke the image build. These packages are not used at runtime (the alpine image uses the native @rolldown binding)."
+  },
+  "overrides": {
+    "@emnapi/core": "1.11.1",
+    "@emnapi/runtime": "1.11.1",
+    "@emnapi/wasi-threads": "1.2.2"
   }
 }
